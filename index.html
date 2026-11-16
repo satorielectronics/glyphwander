@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Glyphwander</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#06080b;color:#cfd6e0;font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:960px;margin:0 auto}
+#hud{display:flex;gap:10px;align-items:center;padding:8px 10px 6px;font-size:12px;border-bottom:1px solid #141a23;flex-wrap:wrap}
+#hud .t{color:#ff8a3d;font-weight:700;letter-spacing:.12em}
+#hud b{color:#fff;font-weight:700}
+.bar{display:inline-block;width:56px;height:6px;background:#1a222d;border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:4px}
+.bar i{display:block;height:100%;background:#7fe07f}
+#view{position:relative;flex:1;min-height:0}
+canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+#log{height:62px;padding:5px 10px;font-size:11.5px;line-height:1.38;overflow:hidden;border-top:1px solid #141a23}
+#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.good{color:#9be070}.bad{color:#ff6a5a}.warn{color:#f0c060}.fire{color:#ff9a4a}.ice{color:#7fd8ff}.zap{color:#ffe24a}.dim{color:#6b7787}
+#controls{display:flex;justify-content:space-between;align-items:center;padding:6px 10px 12px;gap:12px}
+#dpad{display:grid;grid-template-columns:repeat(3,50px);grid-template-rows:repeat(3,50px);gap:4px}
+button{font:inherit;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:9px;touch-action:none}
+button:active{background:#1a2432}
+#dpad button{font-size:18px}
+#acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:1;max-width:230px}
+#acts button{height:50px;font-size:11.5px;letter-spacing:.08em}
+.on{border-color:#ff8a3d!important;color:#ffb27a!important;box-shadow:0 0 12px #ff8a3d44 inset}
+.modal{position:fixed;inset:0;background:#000b;display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.modal[hidden]{display:none}
+.sheet{background:#0b0f15;border:1px solid #243041;border-bottom:none;border-radius:14px 14px 0 0;width:100%;max-width:640px;max-height:82dvh;overflow:auto;padding:14px 14px 20px;box-sizing:border-box}
+.sheet h3{margin:0 0 10px;font-size:13px;letter-spacing:.14em;color:#ff8a3d}
+.row{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid #141a23;cursor:pointer;font-size:13px}
+.row.sel{background:#141c27}
+.row .g{width:18px;text-align:center;font-weight:700}
+.desc{font-size:12px;color:#9aa6b6;margin:10px 4px;line-height:1.45}
+.btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btns button{flex:1;min-width:80px;height:44px;font-size:12px;letter-spacing:.08em}
+.prm{display:grid;grid-template-columns:120px 1fr 44px;gap:8px;align-items:center;font-size:12px;padding:5px 2px}
+.prm input[type=range]{width:100%;accent-color:#ff8a3d}
+.prm span{text-align:right;color:#fff}
+select,input[type=number]{font:inherit;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:6px;padding:6px;width:100%;box-sizing:border-box}
+.note{font-size:11px;color:#6b7787;line-height:1.5;margin:8px 2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud"></div>
+  <div id="view"><canvas id="c"></canvas></div>
+  <div id="log"></div>
+  <div id="controls">
+    <div id="dpad">
+      <button data-d="-1,-1">↖</button><button data-d="0,-1">↑</button><button data-d="1,-1">↗</button>
+      <button data-d="-1,0">←</button><button data-d="0,0" style="font-size:12px">wait</button><button data-d="1,0">→</button>
+      <button data-d="-1,1">↙</button><button data-d="0,1">↓</button><button data-d="1,1">↘</button>
+    </div>
+    <div id="acts">
+      <button data-a="face" id="faceBtn">FACE</button>
+      <button data-a="items">ITEMS</button>
+      <button data-a="stairs">&gt; STAIRS</button>
+      <button data-a="params">⚙ ENGINE</button>
+    </div>
+  </div>
+</div>
+<div class="modal" id="modal" hidden><div class="sheet" id="sheet"></div></div>
+
+<script>
+'use strict';
+// ============================================================
+//  GLYPHWANDER — a tiny deterministic roguelike engine
+//  Everything random flows from P.seed: map gen per floor uses
+//  hash(seed, depth); combat/AI uses a seeded stream; the
+//  cellular automata use a position+turn hash, so they don't
+//  depend on iteration order.
+// ============================================================
+const W=48,H=32;
+const T_WALL=0,T_FLOOR=1,T_GRASS=2,T_WATER=3,T_FIRE=4,T_ASH=5,T_OIL=6,T_ICE=7,T_STAIRS=8;
+const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs'];
+const DIRS8=[[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
+const DIRS4=[[0,-1],[1,0],[0,1],[-1,0]];
+const ARROWS={'0,-1':'↑','1,-1':'↗','1,0':'→','1,1':'↘','0,1':'↓','-1,1':'↙','-1,0':'←','-1,-1':'↖'};
+const FONT='"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
+
+// ---------------- exposed engine parameters ----------------
+const P={
+  seed:1337,
+  fireSpread:0.45, burnTime:3, oilSpread:0.9,
+  windDir:'E', windStrength:0.5,
+  smoke:0.5, regrow:0.015, grassGrowth:0.004,
+  conduct:120,
+  monsterDensity:1, hungerRate:10, lightRadius:5, zoom:15,
+};
+const WIND={Calm:[0,0],N:[0,-1],NE:[.707,-.707],E:[1,0],SE:[.707,.707],S:[0,1],SW:[-.707,.707],W:[-1,0],NW:[-.707,-.707]};
+const PARAM_DEFS=[
+  {k:'fireSpread',label:'Fire spread',min:0,max:1,step:0.05,info:'chance per burning neighbour per turn'},
+  {k:'burnTime',label:'Burn time',min:1,max:10,step:1},
+  {k:'oilSpread',label:'Oil chain',min:0,max:1,step:0.05},
+  {k:'windDir',label:'Wind',select:Object.keys(WIND)},
+  {k:'windStrength',label:'Wind bias',min:0,max:1,step:0.05},
+  {k:'smoke',label:'Smoke output',min:0,max:1,step:0.05},
+  {k:'regrow',label:'Ash → grass',min:0,max:0.1,step:0.005},
+  {k:'grassGrowth',label:'Grass creep',min:0,max:0.05,step:0.002},
+  {k:'conduct',label:'Water conducts',min:0,max:400,step:10},
+  {k:'monsterDensity',label:'Monsters ×',min:0.2,max:3,step:0.1},
+  {k:'hungerRate',label:'Turns/hunger',min:2,max:30,step:1},
+  {k:'lightRadius',label:'Torch radius',min:2,max:10,step:1},
+  {k:'zoom',label:'Tiles across',min:9,max:31,step:2},
+];
+
+// ---------------- deterministic randomness ----------------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hashU(a,b,c,d){let h=(0x9e3779b9^(a|0))>>>0;h=Math.imul(h^(b|0),0x85ebca6b);h^=h>>>13;h=Math.imul(h^(c|0),0xc2b2ae35);h^=h>>>16;h=Math.imul(h^(d|0),0x27d4eb2f);h^=h>>>15;h=Math.imul(h,0x165667b1);h^=h>>>16;return h>>>0}
+function h01(a,b,c,d){return hashU(a,b,c,d)/4294967296}
+const idx=(x,y)=>y*W+x, inb=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
+const cheb=(a,b,c,d)=>Math.max(Math.abs(a-c),Math.abs(b-d));
+const sgn=v=>v>0?1:v<0?-1:0;
+
+// ---------------- content ----------------
+const ITEMS={
+  onigiri:{ch:'%',color:'#f2ead8',name:'Onigiri',use:true,desc:'Restores 50 fullness. If it lies in fire it gets grilled.'},
+  grilled:{ch:'%',color:'#e0a050',name:'Grilled Onigiri',use:true,desc:'Restores 65 fullness and 5 HP.'},
+  herb:{ch:'!',color:'#7fe07f',name:'Medicinal Herb',use:true,desc:'Restores 25 HP. Raises max HP if you are already full.'},
+  fireStaff:{ch:'/',color:'#ff7b2e',name:'Staff of Flame',staff:true,use:true,desc:'Zap fire forward. Ignites grass and oil along the whole path, melts ice.'},
+  iceStaff:{ch:'/',color:'#7fd8ff',name:'Staff of Frost',staff:true,use:true,desc:'Zap frost forward. Water on the path becomes walkable ice, fire is snuffed, the target freezes.'},
+  boltStaff:{ch:'/',color:'#ffe24a',name:'Staff of Thunder',staff:true,use:true,desc:'Zap lightning forward. If it touches water, the entire connected pool is electrified.'},
+  oilJar:{ch:'!',color:'#b07cff',name:'Oil Jar',use:false,desc:'Throw to splash oil (radius 1). Oil burns fast and chains. Explodes if it lands in fire.'},
+  seeds:{ch:'*',color:'#9be06a',name:'Grass Seeds',use:false,desc:'Throw to sprout grass (radius 2). Fuel for later.'},
+  inferno:{ch:'?',color:'#ff5a3a',name:'Inferno Scroll',use:true,desc:'Ignites everything flammable within 3 tiles and scorches nearby foes. Includes the grass you stand on.'},
+  rain:{ch:'?',color:'#5aa8ff',name:'Rain Scroll',use:true,desc:'Douses fire within 3 tiles and floods the ground with puddles.'},
+};
+const ITEM_W=[['onigiri',14],['herb',11],['fireStaff',7],['iceStaff',6],['boltStaff',6],['oilJar',9],['seeds',7],['inferno',5],['rain',5]];
+const MON={
+  rat:{ch:'r',name:'cave rat',color:'#c8a27c',hp:5,atk:2,def:0,xp:2,min:1,w:10,ai:'wander'},
+  goblin:{ch:'g',name:'goblin',color:'#9be070',hp:9,atk:3,def:1,xp:5,min:1,w:8,ai:'hunt'},
+  slime:{ch:'s',name:'slime',color:'#5fe8c8',hp:10,atk:2,def:0,xp:3,min:2,w:6,ai:'hunt',split:true},
+  ember:{ch:'e',name:'ember imp',color:'#ff8a3d',hp:7,atk:3,def:0,xp:6,min:2,w:6,ai:'wander',fireImmune:true,trail:true},
+  thief:{ch:'T',name:'thief',color:'#f0d860',hp:8,atk:1,def:1,xp:8,min:3,w:4,ai:'hunt',steal:true},
+  ogre:{ch:'O',name:'ogre',color:'#e0645a',hp:22,atk:6,def:2,xp:15,min:4,w:4,ai:'hunt',slow:true},
+};
+const FINAL_FLOOR=10;
+
+let G=null, faceMode=false;
+
+function pickW(list,r){let s=0;for(const [,w] of list)s+=w;let v=r*s;for(const [k,w] of list){if((v-=w)<0)return k}return list[0][0]}
+function mkItem(kind){const it={kind};if(ITEMS[kind].staff)it.charges=3+Math.floor(G.rng()*3);return it}
+function itemName(it){return ITEMS[it.kind].name+(it.charges!=null?` [${it.charges}]`:'')}
+function mkMonster(kind,x,y){const d=MON[kind],dp=G.depth-1;const hp=d.hp+Math.floor(dp*1.2);
+  return {kind,x,y,ch:d.ch,name:d.name,color:d.color,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),def:d.def,xp:d.xp,ai:d.ai,
+    split:d.split,fireImmune:d.fireImmune,trail:d.trail,steal:d.steal,slow:d.slow,frozen:0,dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid}}
+
+// ---------------- run / floor setup ----------------
+function newRun(seed){
+  P.seed=seed>>>0;
+  G={depth:0,turn:0,uid:0,over:false,log:[],fx:[],
+     player:{x:0,y:0,ch:'@',name:'you',hp:24,maxhp:24,atk:4,def:1,lv:1,xp:0,full:100,face:[0,1],inv:[],isPlayer:true}};
+  nextFloor();
+  const p=G.player;
+  p.inv.push(mkItem('onigiri'),mkItem('fireStaff'),mkItem('oilJar'));
+  say('Shift+dir or FACE to turn without moving. Staffs & throws fire where @ faces.','dim');
+  updateHUD();
+}
+function nextFloor(){
+  G.depth++;
+  if(G.depth>FINAL_FLOOR){victory();return}
+  G.rng=mulberry32(hashU(P.seed,G.depth,0xA11CE,7));
+  genFloor();
+  const p=G.player;
+  const start=randomRoomCell(c=>G.tile[c]!==T_WATER&&G.tile[c]!==T_STAIRS,G.stairRoom);
+  p.x=start%W;p.y=(start/W)|0;
+  const n=Math.round((4+G.depth*0.7)*P.monsterDensity);
+  for(let k=0;k<n;k++)spawnMonster(true);
+  const ni=5+Math.floor(G.rng()*3);
+  for(let k=0;k<ni;k++){const c=randomRoomCell(c=>G.tile[c]!==T_WATER);G.floorItems.push({x:c%W,y:(c/W)|0,it:mkItem(pickW(ITEM_W,G.rng()))})}
+  const flavor=['The air is dry. Good burning weather.','Water drips somewhere.','You smell lamp oil.','Something scuttles in the grass.','The walls hum faintly.'];
+  say(`B${G.depth}F — ${flavor[hashU(P.seed,G.depth,3,3)%flavor.length]}`,'warn');
+  camX=p.x;camY=p.y;
+  computeView();
+}
+function genFloor(){
+  const R=mulberry32(hashU(P.seed,G.depth,1,0));
+  const N=W*H;
+  G.tile=new Uint8Array(N);G.fuel=new Int8Array(N);G.gas=new Float32Array(N);G.elec=new Uint8Array(N);
+  G.seen=new Uint8Array(N);G.vis=new Uint8Array(N);G.light=new Float32Array(N);
+  G.roomIdx=new Int16Array(N).fill(-1);G.ents=[];G.floorItems=[];
+  const sw=16,sh=10,rooms=[];
+  for(let gy=0;gy<3;gy++)for(let gx=0;gx<3;gx++){
+    const x0=gx*sw,y0=gy*sh+1;const real=R()<0.8||gx===gy;let rx,ry,rw,rh;
+    if(real){rw=4+Math.floor(R()*(sw-7));rh=3+Math.floor(R()*(sh-5));rx=x0+1+Math.floor(R()*(sw-rw-2));ry=y0+1+Math.floor(R()*(sh-rh-2))}
+    else{rw=1;rh=1;rx=x0+3+Math.floor(R()*(sw-6));ry=y0+2+Math.floor(R()*(sh-4))}
+    rooms.push({x:rx,y:ry,w:rw,h:rh,gx,gy,real});
+  }
+  rooms.forEach((r,k)=>{for(let y=r.y;y<r.y+r.h;y++)for(let x=r.x;x<r.x+r.w;x++){G.tile[idx(x,y)]=T_FLOOR;if(r.real)G.roomIdx[idx(x,y)]=k}});
+  // spanning tree over the 3x3 sector grid + a few loops
+  const conns=[],vis=new Set([0]),has=new Set();
+  while(vis.size<9){const cand=[];for(const a of vis){const ra=rooms[a];for(const [dx,dy] of DIRS4){const gx=ra.gx+dx,gy=ra.gy+dy;if(gx<0||gy<0||gx>2||gy>2)continue;const b=gy*3+gx;if(!vis.has(b))cand.push([a,b])}}
+    const e=cand[Math.floor(R()*cand.length)];conns.push(e);vis.add(e[1]);has.add(Math.min(...e)*9+Math.max(...e))}
+  for(let a=0;a<9;a++)for(const b of [a+1,a+3]){if(b>8||(b===a+1&&a%3===2))continue;if(!has.has(a*9+b)&&R()<0.25)conns.push([a,b])}
+  const carve=(x,y)=>{if(G.tile[idx(x,y)]===T_WALL)G.tile[idx(x,y)]=T_FLOOR};
+  for(let [a,b] of conns){
+    let A=rooms[a],B=rooms[b];if(A.gx>B.gx||A.gy>B.gy)[A,B]=[B,A];
+    const ax=A.x+Math.floor(R()*A.w),ay=A.y+Math.floor(R()*A.h),bx=B.x+Math.floor(R()*B.w),by=B.y+Math.floor(R()*B.h);
+    if(A.gy===B.gy){const lo=A.x+A.w,hi=B.x-1,mx=lo+Math.floor(R()*Math.max(1,hi-lo+1));
+      for(let x=Math.min(ax,mx);x<=Math.max(ax,mx);x++)carve(x,ay);
+      for(let y=Math.min(ay,by);y<=Math.max(ay,by);y++)carve(mx,y);
+      for(let x=Math.min(mx,bx);x<=Math.max(mx,bx);x++)carve(x,by);
+    }else{const lo=A.y+A.h,hi=B.y-1,my=lo+Math.floor(R()*Math.max(1,hi-lo+1));
+      for(let y=Math.min(ay,my);y<=Math.max(ay,my);y++)carve(ax,y);
+      for(let x=Math.min(ax,bx);x<=Math.max(ax,bx);x++)carve(x,my);
+      for(let y=Math.min(my,by);y<=Math.max(my,by);y++)carve(bx,y);
+    }
+  }
+  // materials
+  const blob=(r,mat,rmin,rmax,ok)=>{const cx=r.x+R()*r.w,cy=r.y+R()*r.h,rad=rmin+R()*(rmax-rmin);
+    for(let y=r.y;y<r.y+r.h;y++)for(let x=r.x;x<r.x+r.w;x++){const i=idx(x,y);if(!ok(G.tile[i]))continue;
+      if(Math.hypot((x-cx)*0.8,y-cy)+R()*0.9<rad)G.tile[i]=mat}};
+  rooms.forEach(r=>{if(!r.real)return;
+    if(R()<0.8){const nb=1+Math.floor(R()*3);for(let k=0;k<nb;k++)blob(r,T_GRASS,1.5,3.6,t=>t===T_FLOOR)}
+    if(R()<0.35)blob(r,T_WATER,1,2.4,t=>t===T_FLOOR||t===T_GRASS);
+    if(G.depth>=2&&R()<0.3)blob(r,T_OIL,0.8,1.8,t=>t===T_FLOOR);
+  });
+  G.rooms=rooms;
+  const realIdx=rooms.map((r,k)=>r.real?k:-1).filter(k=>k>=0);
+  G.stairRoom=realIdx[Math.floor(R()*realIdx.length)];
+  const sc=randomRoomCell(c=>G.tile[c]===T_FLOOR||G.tile[c]===T_GRASS,-1,G.stairRoom,R);
+  G.tile[sc]=T_STAIRS;
+}
+function randomRoomCell(ok,avoidRoom=-1,onlyRoom=-1,R=G.rng){
+  for(let tries=0;tries<800;tries++){
+    const k=onlyRoom>=0?onlyRoom:Math.floor(R()*9);const r=G.rooms[k];if(!r.real||(k===avoidRoom&&tries<600))continue;
+    const x=r.x+Math.floor(R()*r.w),y=r.y+Math.floor(R()*r.h),c=idx(x,y);
+    if(G.tile[c]===T_WALL||entAt(x,y)||(G.player&&G.player.x===x&&G.player.y===y&&G.depth>0&&tries<700))continue;
+    if(ok&&!ok(c))continue;return c;
+  }
+  for(let c=0;c<W*H;c++)if(G.tile[c]===T_FLOOR)return c;return 0;
+}
+function spawnMonster(initial){
+  const list=Object.entries(MON).filter(([,d])=>d.min<=G.depth).map(([k,d])=>[k,d.w]);
+  const kind=pickW(list,G.rng());
+  const pr=G.roomIdx[idx(G.player.x,G.player.y)];
+  const c=randomRoomCell(c=>G.tile[c]!==T_FIRE&&(initial||!G.vis[c]),initial?G.stairRoom===pr?-1:pr:pr);
+  if(G.vis[c]&&!initial)return;
+  G.ents.push(mkMonster(kind,c%W,(c/W)|0));
+}
+
+// ---------------- queries ----------------
+function entAt(x,y){if(!G.ents)return null;for(const e of G.ents)if(!e.dead&&e.x===x&&e.y===y)return e;return null}
+function occupied(x,y){return entAt(x,y)||(G.player.x===x&&G.player.y===y)}
+function canDiag(x,y,dx,dy){if(dx&&dy)return G.tile[idx(x+dx,y)]!==T_WALL&&G.tile[idx(x,y+dy)]!==T_WALL;return true}
+function walkable(x,y){return inb(x,y)&&G.tile[idx(x,y)]!==T_WALL}
+function los(x0,y0,x1,y1){let dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx+dy,x=x0,y=y0;
+  while(!(x===x1&&y===y1)){const e2=2*err;if(e2>=dy){err+=dy;x+=sx}if(e2<=dx){err+=dx;y+=sy}
+    if(x===x1&&y===y1)return true;const i=y*W+x;if(G.tile[i]===T_WALL||G.gas[i]>0.8)return false}return true}
+
+// ---------------- view / light ----------------
+function computeView(){
+  const p=G.player,N=W*H;G.vis.fill(0);G.light.fill(0);
+  const fl=new Float32Array(N);
+  for(let i=0;i<N;i++){if(G.tile[i]!==T_FIRE&&!G.elec[i])continue;const fx=i%W,fy=(i/W)|0,s=G.tile[i]===T_FIRE?1:0.7;
+    for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=fx+dx,y=fy+dy;if(!inb(x,y))continue;const d=Math.hypot(dx,dy);if(d>3.6)continue;const j=idx(x,y);fl[j]=Math.max(fl[j],s*(1-d/4))}}
+  const ri=G.roomIdx[idx(p.x,p.y)],room=ri>=0?G.rooms[ri]:null,VR=13;
+  for(let y=p.y-VR;y<=p.y+VR;y++)for(let x=p.x-VR;x<=p.x+VR;x++){
+    if(!inb(x,y))continue;const i=idx(x,y),d=Math.hypot(x-p.x,y-p.y);
+    let L=Math.max(0,1-d/(P.lightRadius+0.5));
+    if(room&&x>=room.x-1&&x<=room.x+room.w&&y>=room.y-1&&y<=room.y+room.h)L=Math.max(L,0.5);
+    L=Math.max(L,fl[i]);
+    if(L<=0.02&&d>1.5)continue;
+    if(!los(p.x,p.y,x,y))continue;
+    L*=1-Math.min(0.6,G.gas[i]*0.6);
+    G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(L,0.08);
+  }
+}
+
+// ---------------- messages / fx ----------------
+function say(msg,cls=''){G.log.push({msg,cls});if(G.log.length>40)G.log.shift();renderLog()}
+function fxText(x,y,text,color){G.fx.push({k:'t',x,y,text,color,t0:performance.now(),dur:800})}
+function fxGlyph(x,y,ch,color,delay=0,dur=260){G.fx.push({k:'g',x,y,ch,color,t0:performance.now()+delay,dur})}
+const seenBy=(x,y)=>inb(x,y)&&G.vis[idx(x,y)];
+
+// ---------------- combat ----------------
+function Name(e){return e.isPlayer?'You':'The '+e.name}
+function attack(a,b){
+  const R=G.rng;
+  if(R()>(a.isPlayer?0.92:0.85)){if(a.isPlayer||seenBy(a.x,a.y))say(`${Name(a)} ${a.isPlayer?'miss':'misses'}.`,'dim');fxText(b.x,b.y,'miss','#6b7787');return}
+  const dmg=Math.max(1,a.atk+Math.floor(R()*3)-b.def);
+  if(!a.isPlayer&&a.steal&&!a.carry&&G.player.inv.length){
+    const k=Math.floor(R()*G.player.inv.length);a.carry=G.player.inv.splice(k,1)[0];a.fleeing=true;
+    say(`The thief snatches your ${itemName(a.carry)} and bolts!`,'bad');return}
+  if(b.isPlayer)G.cause=`a ${a.name}`;
+  hurt(b,dmg,a.isPlayer?'you':a.name);
+}
+function hurt(e,dmg,cause){
+  if(e.dead||G.over)return;
+  e.hp-=dmg;fxText(e.x,e.y,'-'+dmg,e.isPlayer?'#ff6a5a':'#ffffff');
+  if(e.isPlayer){if(cause!=='you'&&!['goblin','cave rat','slime','ember imp','thief','ogre'].includes(cause))G.cause=cause;
+    if(e.hp<=0){e.hp=0;gameOver()}return}
+  if(e.hp<=0){kill(e,cause);return}
+  if(e.split&&e.hp>=4&&G.ents.length<45){
+    const order=DIRS8.slice().sort((a,b)=>h01(G.turn,e.id,a[0]*3+a[1],1)-h01(G.turn,e.id,b[0]*3+b[1],1));
+    for(const [dx,dy] of order){const nx=e.x+dx,ny=e.y+dy;if(walkable(nx,ny)&&!occupied(nx,ny)&&G.tile[idx(nx,ny)]!==T_FIRE){
+      const c=mkMonster('slime',nx,ny);c.hp=c.maxhp=Math.floor(e.hp/2);e.hp-=c.hp;c.tx=e.tx;c.ty=e.ty;G.ents.push(c);
+      if(seenBy(e.x,e.y))say('The slime splits in two!','warn');break}}
+  }
+}
+function kill(e,cause){
+  e.dead=true;
+  const verb=cause==='flames'?'burns to cinders':cause==='electrocution'?'is fried':cause==='water'?'fizzles out':cause==='blast'?'is blown apart':'is defeated';
+  if(seenBy(e.x,e.y))say(`The ${e.name} ${verb}.`,cause==='you'?'':'fire');
+  if(e.carry){G.floorItems.push({x:e.x,y:e.y,it:e.carry});say(`It drops your ${itemName(e.carry)}.`,'good')}
+  gainXp(e.xp);
+  G.ents=G.ents.filter(m=>!m.dead);
+}
+function xpNeed(lv){return 5*lv*(lv+1)}
+function gainXp(n){const p=G.player;p.xp+=n;while(p.xp>=xpNeed(p.lv)){p.xp-=xpNeed(p.lv);p.lv++;p.maxhp+=4;p.hp+=4;p.atk+=1;say(`Level up! You are now Lv${p.lv}.`,'good')}}
+
+// ---------------- world: cellular automata ----------------
+function ignite(i){const t=G.tile[i];
+  if(t===T_GRASS){G.tile[i]=T_FIRE;G.fuel[i]=P.burnTime}
+  else if(t===T_OIL){G.tile[i]=T_FIRE;G.fuel[i]=2}
+  else if(t===T_ICE){G.tile[i]=T_WATER}
+}
+function worldStep(){
+  const N=W*H,t=G.tile,f=G.fuel,g=G.gas,nt=t.slice(),nf=f.slice(),ng=new Float32Array(N);
+  const [wx,wy]=WIND[P.windDir]||[0,0],ws=P.windStrength,T=G.turn,S=P.seed;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x,c=t[i];
+    if(c===T_WALL)continue;
+    let fireN=0,q=1,grassN=0;
+    for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const nc=t[ny*W+nx];
+      if(nc===T_GRASS&&(dx===0||dy===0))grassN++;
+      if(nc!==T_FIRE)continue;fireN++;
+      if(c===T_GRASS||c===T_OIL){
+        const diag=(dx&&dy)?0.7:1, along=(-dx*wx-dy*wy)/Math.hypot(dx,dy);
+        const p=Math.min(1,Math.max(0,(c===T_OIL?P.oilSpread:P.fireSpread)*diag*(1+ws*along*1.5)));
+        q*=1-p;
+      }
+    }
+    if(c===T_FIRE){nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0}}
+    else if((c===T_GRASS||c===T_OIL)&&fireN&&h01(S,T,i,1)<1-q){nt[i]=T_FIRE;nf[i]=c===T_OIL?2:P.burnTime}
+    else if(c===T_ASH&&h01(S,T,i,2)<P.regrow)nt[i]=T_GRASS;
+    else if(c===T_FLOOR&&grassN&&h01(S,T,i,3)<P.grassGrowth*grassN)nt[i]=T_GRASS;
+    else if(c===T_ICE&&fireN&&h01(S,T,i,4)<0.5)nt[i]=T_WATER;
+    // gas: diffuse + advect with wind + decay
+    let s=g[i]*0.5;
+    for(const [dx,dy] of DIRS4){const nx=x+dx,ny=y+dy;const ni=ny*W+nx;
+      const along=-dx*wx-dy*wy; const w=0.125*(1+ws*along);
+      s+=(inb(nx,ny)&&t[ni]!==T_WALL?g[ni]:g[i])*w}
+    if(c===T_FIRE)s+=P.smoke*0.45;
+    if(c===T_WATER&&fireN)s+=0.25*P.smoke+0.1; // steam
+    ng[i]=Math.min(1,s*0.9);
+    if(ng[i]<0.01)ng[i]=0;
+  }
+  G.tile=nt;G.fuel=nf;G.gas=ng;
+  for(let i=0;i<N;i++)if(G.elec[i])G.elec[i]--;
+  // floor items react to fire
+  for(const fi of G.floorItems.slice()){
+    const i=idx(fi.x,fi.y);if(G.tile[i]!==T_FIRE)continue;
+    const k=fi.it.kind,vis=G.vis[i];
+    if(k==='onigiri'){fi.it.kind='grilled';if(vis)say('An onigiri sizzles in the flames… grilled!','fire')}
+    else if(k==='oilJar'){G.floorItems.splice(G.floorItems.indexOf(fi),1);explode(fi.x,fi.y,'An oil jar explodes!')}
+    else if(['herb','seeds','inferno','rain'].includes(k)){G.floorItems.splice(G.floorItems.indexOf(fi),1);if(vis)say(`The ${ITEMS[k].name} burns up.`,'fire')}
+  }
+}
+function explode(x,y,msg){
+  if(seenBy(x,y))say(msg,'fire');
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const i=idx(nx,ny),t=G.tile[i];
+    if(t===T_WALL||t===T_WATER||t===T_STAIRS)continue;
+    if(t===T_ICE){G.tile[i]=T_WATER;continue}
+    G.tile[i]=T_FIRE;G.fuel[i]=Math.max(G.fuel[i],t===T_GRASS?P.burnTime:t===T_OIL?2:1);G.gas[i]=Math.min(1,G.gas[i]+0.5);
+    fxGlyph(nx,ny,'@','#ffd27a',0,300);
+    const e=entAt(nx,ny)||(G.player.x===nx&&G.player.y===ny?G.player:null);
+    if(e){if(e.isPlayer)G.cause='an explosion';hurt(e,8,'blast')}
+  }
+}
+function electrify(sx,sy){
+  const seen=new Set([idx(sx,sy)]),q=[[sx,sy]];let n=0;
+  while(q.length&&n<P.conduct){const [x,y]=q.shift();const i=idx(x,y);G.elec[i]=2;n++;
+    fxGlyph(x,y,'ϟ','#fff27a',n*6,320);
+    for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const j=idx(nx,ny);if(seen.has(j)||G.tile[j]!==T_WATER)continue;seen.add(j);q.push([nx,ny])}}
+  say(`Lightning races through the water (${n} tiles)!`,'zap');
+}
+function envDamage(){
+  for(const e of [G.player,...G.ents]){
+    if(e.dead||G.over)continue;const i=idx(e.x,e.y),t=G.tile[i];
+    if(t===T_FIRE){if(e.frozen)e.frozen=0;if(!e.fireImmune){if(e.isPlayer){G.cause='the flames';say('You are burning!','bad')}hurt(e,3+Math.floor(G.depth/3),'flames')}}
+    if(e.dead||G.over)continue;
+    if(t===T_WATER&&G.elec[i]){if(e.isPlayer){G.cause='electrocution';say('ZAP! The water is live!','bad')}hurt(e,6,'electrocution')}
+    if(e.dead||G.over)continue;
+    if(t===T_WATER&&e.trail)hurt(e,4,'water');
+  }
+}
+
+// ---------------- monsters ----------------
+function stepScore(m,nx,ny,tx,ty){return cheb(nx,ny,tx,ty)+0.1*Math.hypot(nx-tx,ny-ty)}
+function safeFor(m,nx,ny){const t=G.tile[idx(nx,ny)];if(t===T_FIRE&&!m.fireImmune)return false;if(t===T_WATER&&G.elec[idx(nx,ny)])return false;if(m.trail&&t===T_WATER)return false;return true}
+function moveMonster(m,nx,ny){const oi=idx(m.x,m.y);m.x=nx;m.y=ny;
+  if(m.trail){const t=G.tile[oi];if(t===T_GRASS||t===T_OIL)ignite(oi)}}
+function monsterAct(m){
+  const p=G.player,d=cheb(m.x,m.y,p.x,p.y);
+  if(m.fleeing){let best=null,bs=d;
+    for(const [dx,dy] of DIRS8){const nx=m.x+dx,ny=m.y+dy;if(!walkable(nx,ny)||occupied(nx,ny)||!canDiag(m.x,m.y,dx,dy)||!safeFor(m,nx,ny))continue;
+      const s=cheb(nx,ny,p.x,p.y);if(s>bs){bs=s;best=[nx,ny]}}
+    if(best)moveMonster(m,...best);return}
+  const dx=sgn(p.x-m.x),dy=sgn(p.y-m.y);
+  if(d===1&&canDiag(m.x,m.y,dx,dy)){attack(m,p);return}
+  const sees=d<=9&&los(m.x,m.y,p.x,p.y);
+  if(sees&&(m.ai==='hunt'||d<=4)){m.tx=p.x;m.ty=p.y}
+  if(m.tx!=null){
+    let best=null,bs=stepScore(m,m.x,m.y,m.tx,m.ty);
+    for(const [ex,ey] of DIRS8){const nx=m.x+ex,ny=m.y+ey;if(!walkable(nx,ny)||occupied(nx,ny)||!canDiag(m.x,m.y,ex,ey)||!safeFor(m,nx,ny))continue;
+      const s=stepScore(m,nx,ny,m.tx,m.ty);if(s<bs-1e-6){bs=s;best=[nx,ny]}}
+    if(best)moveMonster(m,...best);
+    if(!best||(m.x===m.tx&&m.y===m.ty)){m.tx=null;m.ty=null}
+    return}
+  // wander
+  for(let k=0;k<8;k++){
+    const [ex,ey]=DIRS8[m.dir],nx=m.x+ex,ny=m.y+ey;
+    if(walkable(nx,ny)&&!occupied(nx,ny)&&canDiag(m.x,m.y,ex,ey)&&safeFor(m,nx,ny)&&G.rng()<0.85){moveMonster(m,nx,ny);return}
+    m.dir=(m.dir+1+Math.floor(G.rng()*7))%8;
+  }
+}
+function monstersAct(){
+  for(const m of G.ents.slice()){
+    if(m.dead||G.over)continue;
+    if(m.frozen>0){m.frozen--;continue}
+    if(m.slow&&G.turn%2)continue;
+    const steps=m.fleeing?2:1;
+    for(let s=0;s<steps&&!m.dead&&!G.over;s++)monsterAct(m);
+  }
+}
+
+// ---------------- player actions ----------------
+function endTurn(){
+  if(G.over)return;
+  G.turn++;
+  monstersAct();if(G.over)return finishTurn();
+  worldStep();
+  envDamage();if(G.over)return finishTurn();
+  const p=G.player;
+  if(G.turn%P.hungerRate===0&&p.full>0){p.full--;if(p.full===20)say('You are getting hungry.','warn');if(p.full===0)say('You are starving!','bad')}
+  if(p.full<=0){G.cause='starvation';hurt(p,1,'starvation')}
+  else if(G.turn%3===0&&p.hp<p.maxhp)p.hp++;
+  if(G.turn%45===0&&G.ents.length<Math.round(10*P.monsterDensity)+G.depth)spawnMonster(false);
+  finishTurn();
+}
+function finishTurn(){computeView();updateHUD()}
+function playerMove(dx,dy){
+  if(G.over)return;const p=G.player;
+  if(dx===0&&dy===0){endTurn();return}
+  p.face=[dx,dy];
+  if(faceMode){setFace(false);updateHUD();return}
+  const nx=p.x+dx,ny=p.y+dy;if(!inb(nx,ny))return;
+  const m=entAt(nx,ny);
+  if(m){if(canDiag(p.x,p.y,dx,dy)){attack(p,m);endTurn()}return}
+  if(G.tile[idx(nx,ny)]===T_WALL||!canDiag(p.x,p.y,dx,dy))return;
+  p.x=nx;p.y=ny;
+  const t=G.tile[idx(nx,ny)];
+  if(t===T_FIRE)say('You step into the flames!','bad');
+  pickupAt(nx,ny);
+  if(t===T_STAIRS)say('Stairs down. Press STAIRS (>) to descend.','warn');
+  endTurn();
+}
+function pickupAt(x,y){
+  for(let k=G.floorItems.length-1;k>=0;k--){const f=G.floorItems[k];if(f.x!==x||f.y!==y)continue;
+    if(G.player.inv.length>=12){say(`Your bag is full. ${itemName(f.it)} stays here.`,'warn');continue}
+    G.player.inv.push(f.it);G.floorItems.splice(k,1);say(`Picked up ${itemName(f.it)}.`,'good')}
+}
+function descend(){
+  const p=G.player;if(G.over)return;
+  if(G.tile[idx(p.x,p.y)]!==T_STAIRS){say('There are no stairs here.','dim');return}
+  nextFloor();updateHUD();
+}
+function rayPath(range,stopAtEnt){
+  const p=G.player,[dx,dy]=p.face,path=[];let x=p.x,y=p.y,hit=null;
+  for(let k=0;k<range;k++){
+    if(dx&&dy&&!canDiag(x,y,dx,dy))break;
+    x+=dx;y+=dy;if(!inb(x,y)||G.tile[idx(x,y)]===T_WALL)break;
+    path.push([x,y]);const e=entAt(x,y);if(e&&stopAtEnt){hit=e;break}
+  }
+  return {path,hit};
+}
+function zap(kind){
+  const {path,hit}=rayPath(12,true);
+  const col={fire:'#ff8a3d',ice:'#9fe8ff',bolt:'#fff27a'}[kind],ch={fire:'*',ice:'+',bolt:'ϟ'}[kind];
+  path.forEach(([x,y],n)=>fxGlyph(x,y,ch,col,n*28,240));
+  let touchedWater=null;
+  for(const [x,y] of path){const i=idx(x,y),t=G.tile[i];
+    if(kind==='fire'){if(t===T_GRASS||t===T_OIL||t===T_ICE)ignite(i);if(t===T_WATER)G.gas[i]=Math.min(1,G.gas[i]+0.6)}
+    if(kind==='ice'){if(t===T_WATER)G.tile[i]=T_ICE;if(t===T_FIRE){G.tile[i]=T_ASH;G.fuel[i]=0}}
+    if(kind==='bolt'&&t===T_WATER&&!touchedWater)touchedWater=[x,y];
+  }
+  if(kind==='fire'){say('A gout of flame roars forward!','fire');
+    if(hit){if(hit.frozen)hit.frozen=0;if(!hit.fireImmune)hurt(hit,7+Math.floor(G.rng()*4),'flames');else say(`The ${hit.name} drinks the fire.`,'warn');ignite(idx(hit.x,hit.y))}}
+  if(kind==='ice'){say('A blast of frost!','ice');
+    if(hit){hit.frozen=5;say(`The ${hit.name} is frozen solid.`,'ice');hurt(hit,hit.trail?8:3,'you')}}
+  if(kind==='bolt'){say('Thunder cracks!','zap');
+    if(hit)hurt(hit,9+Math.floor(G.rng()*5),'electrocution');
+    if(!touchedWater&&hit&&G.tile[idx(hit.x,hit.y)]===T_WATER)touchedWater=[hit.x,hit.y];
+    if(touchedWater)electrify(...touchedWater)}
+}
+function throwItem(k){
+  const p=G.player,it=p.inv.splice(k,1)[0],d=ITEMS[it.kind];
+  const {path,hit}=rayPath(10,true);
+  path.forEach(([x,y],n)=>fxGlyph(x,y,d.ch,d.color,n*30,90));
+  const land=path.length?path[path.length-1]:[p.x,p.y];
+  const [lx,ly]=land;
+  say(`You throw the ${d.name}.`);
+  if(it.kind==='oilJar'){
+    if(G.tile[idx(lx,ly)]===T_FIRE){explode(lx,ly,'The jar bursts into a fireball!');return}
+    say('Oil splashes everywhere.','dim');
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=lx+dx,y=ly+dy;if(!inb(x,y))continue;const i=idx(x,y),t=G.tile[i];
+      if(t===T_FIRE){explode(x,y,'The oil catches!');continue}
+      if(t===T_FLOOR||t===T_GRASS||t===T_ASH)G.tile[i]=T_OIL}
+    if(hit)hurt(hit,2,'you');return}
+  if(it.kind==='seeds'){say('Grass sprouts instantly.','good');
+    for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const x=lx+dx,y=ly+dy;if(!inb(x,y)||Math.hypot(dx,dy)>2.3)continue;const i=idx(x,y);if(G.tile[i]===T_FLOOR||G.tile[i]===T_ASH)G.tile[i]=T_GRASS}
+    return}
+  if(hit){
+    if(it.kind==='herb'){hit.hp=Math.min(hit.maxhp,hit.hp+25);say(`The ${hit.name} looks healthier. Oops.`,'warn');return}
+    hurt(hit,2,'you');
+  }
+  if(G.tile[idx(lx,ly)]===T_WATER&&!hit){say(`The ${d.name} sinks.`,'dim');return}
+  G.floorItems.push({x:hit?hit.x:lx,y:hit?hit.y:ly,it});
+}
+function useItem(k){
+  const p=G.player,it=p.inv[k],d=ITEMS[it.kind];
+  if(d.staff){
+    if(it.charges<=0){say('Nothing happens. The staff is spent.','dim');return true}
+    it.charges--;zap(it.kind==='fireStaff'?'fire':it.kind==='iceStaff'?'ice':'bolt');return true}
+  p.inv.splice(k,1);
+  switch(it.kind){
+    case 'onigiri':p.full=Math.min(100,p.full+50);say('Delicious. (+50 fullness)','good');break;
+    case 'grilled':p.full=Math.min(100,p.full+65);p.hp=Math.min(p.maxhp,p.hp+5);say('Smoky and perfect. (+65 fullness)','good');break;
+    case 'herb':if(p.hp>=p.maxhp){p.maxhp+=2;p.hp+=2;say('You feel sturdier. (+2 max HP)','good')}else{p.hp=Math.min(p.maxhp,p.hp+25);say('You feel better.','good')}break;
+    case 'inferno':{say('The scroll erupts in a ring of fire!','fire');
+      for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=p.x+dx,y=p.y+dy;if(!inb(x,y)||!los(p.x,p.y,x,y))continue;const i=idx(x,y);
+        if(G.tile[i]===T_GRASS||G.tile[i]===T_OIL||G.tile[i]===T_ICE){ignite(i);fxGlyph(x,y,'^','#ff6a3a',Math.hypot(dx,dy)*40,300)}
+        const e=entAt(x,y);if(e&&!e.fireImmune)hurt(e,10,'flames')}
+      break}
+    case 'rain':{say('Rain pours down around you.','ice');
+      for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=p.x+dx,y=p.y+dy;if(!inb(x,y)||Math.hypot(dx,dy)>3.3)continue;const i=idx(x,y),t=G.tile[i];
+        if(t===T_FIRE){G.tile[i]=T_ASH;G.fuel[i]=0}
+        if((t===T_FLOOR||t===T_ASH)&&h01(P.seed,G.turn,i,9)<0.5)G.tile[i]=T_WATER;
+        G.gas[i]=0;if(t!==T_WALL)fxGlyph(x,y,'\'','#7fb8ff',h01(i,1,2,3)*300,250)}
+      break}
+  }
+  return true;
+}
+function dropItem(k){const p=G.player,it=p.inv.splice(k,1)[0];G.floorItems.push({x:p.x,y:p.y,it,dropped:true});say(`Dropped ${itemName(it)}.`)}
+
+function gameOver(){G.over=true;say(`You were felled by ${G.cause||'something'} on B${G.depth}F.`,'bad');
+  const g0=G;setTimeout(()=>G===g0&&showEnd(`FELLED ON B${G.depth}F`,`Killed by ${G.cause||'something'} on turn ${G.turn}, at Lv${G.player.lv}.`),500)}
+function victory(){G.over=true;G.depth=FINAL_FLOOR;showEnd('YOU REACHED THE BOTTOM',`Cleared B${FINAL_FLOOR}F in ${G.turn} turns at Lv${G.player.lv}.`)}
+
+// ============================================================
+//  RENDERING
+// ============================================================
+const cv=document.getElementById('c'),cx=cv.getContext('2d');
+let DPR=1,CW=0,CH=0,TS=24,camX=0,camY=0,bgCanvas=null,bgStep=10,vign=null;
+function hslPal(h,s,l0,l1){const a=[];for(let k=0;k<10;k++)a.push(`hsl(${h},${s}%,${(l0+(l1-l0)*k/9).toFixed(1)}%)`);return a}
+const PAL={
+  face:hslPal(215,16,10,78),top:hslPal(218,14,7,42),floor:hslPal(220,12,8,34),grass:hslPal(105,48,9,58),
+  water:hslPal(205,72,12,62),ash:hslPal(30,6,8,36),oil:hslPal(278,45,10,58),ice:hslPal(188,80,22,86),
+  mem:hslPal(225,22,6,26),smoke:hslPal(220,8,14,52),
+  fire:Array.from({length:10},(_,k)=>`hsl(${(k*6).toFixed(0)},100%,${(32+k*5).toFixed(0)}%)`),
+  elec:hslPal(55,100,40,88),
+};
+const RAMP={face:' .:-=+*#%@',top:' .-:=+',floor:' ..·:',grass:' .,\'";',ash:' .,:',oil:' .°oO',ice:' .:+#',fire:' .\'^*%#@',smoke:' .:;%'};
+function resize(){
+  const r=cv.parentElement.getBoundingClientRect();DPR=Math.min(2,window.devicePixelRatio||1);CW=r.width;CH=r.height;
+  cv.width=Math.round(CW*DPR);cv.height=Math.round(CH*DPR);
+  TS=Math.max(12,Math.floor(Math.min(CW/P.zoom,CH/(P.zoom*0.75))));
+  bgStep=Math.max(8,Math.round(TS/2.4));
+  bgCanvas=document.createElement('canvas');bgCanvas.width=Math.round((CW+bgStep*4)*DPR);bgCanvas.height=Math.round((CH+bgStep*4)*DPR);
+  const b=bgCanvas.getContext('2d');b.scale(DPR,DPR);b.font=`${bgStep}px ${FONT}`;b.textAlign='center';b.textBaseline='middle';
+  for(let y=0;y*bgStep<CH+bgStep*4;y++)for(let x=0;x*bgStep<CW+bgStep*4;x++){const r=h01(x,y,5,5);
+    if(r<0.45)continue;b.fillStyle=r>0.93?'#2a3442':'#151c26';b.fillText(r>0.97?'=':r>0.6?'~':'-',(x+.5)*bgStep,(y+.5)*bgStep)}
+  vign=cx.createRadialGradient(CW/2,CH/2,Math.min(CW,CH)*0.25,CW/2,CH/2,Math.max(CW,CH)*0.75);
+  vign.addColorStop(0,'rgba(0,0,0,0)');vign.addColorStop(1,'rgba(0,0,0,0.7)');
+}
+function isFace(x,y){return y+1<H&&G.tile[idx(x,y+1)]!==T_WALL}
+function render(now){
+  if(!G)return;
+  const p=G.player;
+  camX+=(p.x-camX)*0.28;camY+=(p.y-camY)*0.28;if(Math.abs(p.x-camX)<0.01)camX=p.x;if(Math.abs(p.y-camY)<0.01)camY=p.y;
+  cx.setTransform(DPR,0,0,DPR,0,0);
+  cx.fillStyle='#06080b';cx.fillRect(0,0,CW,CH);
+  const off=(now*0.004)%(bgStep*2);
+  cx.drawImage(bgCanvas,-bgStep*2+off,-bgStep*2+off*0.5,CW+bgStep*4,CH+bgStep*4);
+  const ox=CW/2-(camX+0.5)*TS,oy=CH/2-(camY+0.5)*TS;
+  const x0=Math.max(0,Math.floor(-ox/TS)),x1=Math.min(W-1,Math.ceil((CW-ox)/TS)),y0=Math.max(0,Math.floor(-oy/TS)),y1=Math.min(H-1,Math.ceil((CH-oy)/TS));
+  const SX=3,SY=3,sw=TS/SX,sh=TS/SY,fr=Math.floor(now/110),fr2=Math.floor(now/260);
+  cx.font=`${Math.max(6,sh*1.18).toFixed(1)}px ${FONT}`;cx.textAlign='center';cx.textBaseline='middle';
+  const tile=G.tile;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const i=y*W+x;if(!G.seen[i])continue;
+    const v=G.vis[i],L=v?Math.min(1,G.light[i]*1.25):0,t=tile[i],px=ox+x*TS,py=oy+y*TS;
+    cx.fillStyle=v?(t===T_FIRE?'#140804':'#090c11'):'#07090d';cx.fillRect(px,py,TS+0.6,TS+0.6);
+    const lum=v?0.18+0.82*L:0.3,face=t===T_WALL&&isFace(x,y),gas=v?G.gas[i]:0,el=G.elec[i]&&t===T_WATER;
+    for(let sy=0;sy<SY;sy++)for(let sx=0;sx<SX;sx++){
+      const n=h01(i,sx,sy,7);let b,ramp,pal,ch=null;
+      if(gas>0.06&&h01(i,sx*3+sy,fr2,11)<gas*0.85){b=0.35+gas*0.6;ramp=RAMP.smoke;pal=PAL.smoke}
+      else switch(t){
+        case T_WALL: if(face){b=(0.95-sy*0.13)*(0.75+0.25*n);ramp=RAMP.face;pal=PAL.face}else{b=0.55*(0.6+0.4*n);ramp=RAMP.top;pal=PAL.top}break;
+        case T_FLOOR:case T_STAIRS: b=0.3*n+0.1;ramp=RAMP.floor;pal=PAL.floor;break;
+        case T_GRASS: b=0.45+0.5*n;ramp=RAMP.grass;pal=PAL.grass;break;
+        case T_ASH: b=0.15+0.45*n;ramp=RAMP.ash;pal=PAL.ash;break;
+        case T_OIL: b=0.4+0.5*h01(i,sx,sy,fr2);ramp=RAMP.oil;pal=PAL.oil;break;
+        case T_ICE: b=0.55+0.45*n;ramp=RAMP.ice;pal=PAL.ice;break;
+        case T_WATER:{const w=Math.sin(now*0.0025+x*0.9+y*0.45+sx*0.8-sy*0.3);
+          if(el){b=0.6+0.4*h01(i,sx,sy,fr);ch=b>0.85?'ϟ':'≈';pal=PAL.elec}else{b=0.45+0.3*w;ch=w>0.3?'~':w>-0.4?'-':'.';pal=PAL.water}break}
+        case T_FIRE:{const f=h01(i,sx,sy,fr);b=0.45+0.55*f-sy*0.08+(G.fuel[i]>1?0.1:0);ramp=RAMP.fire;pal=PAL.fire;break}
+      }
+      if(t!==T_FIRE&&!el)b*=lum;
+      if(!v)pal=PAL.mem;
+      b=Math.max(0,Math.min(1,b));
+      if(ch===null)ch=ramp[Math.min(ramp.length-1,Math.floor(b*ramp.length))];
+      if(ch===' ')continue;
+      cx.fillStyle=pal[Math.round(b*9)];cx.fillText(ch,px+(sx+0.5)*sw,py+(sy+0.5)*sh);
+    }
+  }
+  // stairs + items
+  const big=(ch,x,y,color,scale,glow)=>{const px=ox+x*TS,py=oy+y*TS;
+    cx.fillStyle='#06080bdd';cx.fillRect(px+TS*0.14,py+TS*0.1,TS*0.72,TS*0.8);
+    cx.font=`700 ${(TS*scale).toFixed(1)}px ${FONT}`;cx.shadowColor=color;cx.shadowBlur=glow;cx.fillStyle=color;cx.fillText(ch,px+TS/2,py+TS/2+1);cx.shadowBlur=0};
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;if(tile[i]===T_STAIRS&&G.seen[i])big('>',x,y,G.vis[i]?'#bff6ff':'#4a5a6a',0.8,G.vis[i]?TS*0.5:0)}
+  for(const f of G.floorItems){if(!G.vis[idx(f.x,f.y)])continue;const d=ITEMS[f.it.kind];big(d.ch,f.x,f.y,d.color,0.62,TS*0.3)}
+  // aim preview
+  if(faceMode||G.aimPreview){const [dx,dy]=p.face;let x=p.x,y=p.y;cx.font=`700 ${(TS*0.4).toFixed(1)}px ${FONT}`;
+    for(let k=0;k<10;k++){if(dx&&dy&&!canDiag(x,y,dx,dy))break;x+=dx;y+=dy;if(!inb(x,y)||tile[idx(x,y)]===T_WALL)break;
+      cx.fillStyle=`rgba(255,138,61,${0.7-k*0.06})`;cx.fillText('·',ox+(x+.5)*TS,oy+(y+.5)*TS)}}
+  // monsters
+  for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;
+    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.color,0.88,TS*0.45);
+    const px=ox+m.x*TS,py=oy+m.y*TS;
+    if(m.frozen){cx.strokeStyle='#9fe8ff88';cx.strokeRect(px+TS*0.12,py+TS*0.08,TS*0.76,TS*0.84)}
+    if(m.hp<m.maxhp){cx.fillStyle='#2a0d0d';cx.fillRect(px+TS*0.15,py+TS*0.9,TS*0.7,TS*0.07);cx.fillStyle='#ff6a5a';cx.fillRect(px+TS*0.15,py+TS*0.9,TS*0.7*Math.max(0,m.hp/m.maxhp),TS*0.07)}
+    if(m.carry){cx.font=`700 ${(TS*0.32).toFixed(1)}px ${FONT}`;cx.fillStyle=ITEMS[m.carry.kind].color;cx.fillText(ITEMS[m.carry.kind].ch,px+TS*0.85,py+TS*0.18)}
+  }
+  // player
+  big('@',p.x,p.y,G.over?'#ff6a5a':'#ffffff',0.92,TS*0.6);
+  {const [dx,dy]=p.face;cx.font=`700 ${(TS*0.34).toFixed(1)}px ${FONT}`;cx.fillStyle='#ff8a3d';
+   cx.fillText(ARROWS[dx+','+dy]||'',ox+(p.x+.5+dx*0.42)*TS,oy+(p.y+.5+dy*0.42)*TS)}
+  // fx
+  const keep=[];
+  for(const f of G.fx){const a=(now-f.t0)/f.dur;if(a>1)continue;keep.push(f);if(a<0)continue;
+    const px=ox+(f.x+.5)*TS,py=oy+(f.y+.5)*TS;
+    if(f.k==='g'){cx.globalAlpha=1-a*0.6;cx.font=`700 ${(TS*0.8).toFixed(1)}px ${FONT}`;cx.shadowColor=f.color;cx.shadowBlur=TS*0.6;cx.fillStyle=f.color;cx.fillText(f.ch,px,py)}
+    else{cx.globalAlpha=1-a;cx.font=`700 ${(TS*0.42).toFixed(1)}px ${FONT}`;cx.shadowBlur=0;cx.fillStyle=f.color;cx.fillText(f.text,px,py-TS*0.3-a*TS*0.6)}
+    cx.globalAlpha=1;cx.shadowBlur=0}
+  G.fx=keep;
+  cx.fillStyle=vign;cx.fillRect(0,0,CW,CH);
+}
+function loop(now){render(now);requestAnimationFrame(loop)}
+
+// ============================================================
+//  UI
+// ============================================================
+const $=s=>document.querySelector(s);
+function stateHash(){let h=2166136261;const mix=v=>{h^=v;h=Math.imul(h,16777619)};for(let i=0;i<G.tile.length;i++)mix(G.tile[i]);for(const m of G.ents){mix(m.x);mix(m.y);mix(m.hp)}const p=G.player;mix(p.x);mix(p.y);mix(p.hp);return(h>>>0).toString(16).padStart(8,'0')}
+function updateHUD(){
+  const p=G.player,hpPct=Math.max(0,p.hp/p.maxhp*100);
+  const wv=WIND[P.windDir],wa=P.windDir==='Calm'?'·':ARROWS[Math.round(wv[0])+','+Math.round(wv[1])];
+  const t=G.tile[idx(p.x,p.y)];
+  $('#hud').innerHTML=`<span class="t">GLYPHWANDER</span><span><b>B${G.depth}F</b></span><span>Lv<b>${p.lv}</b></span>`+
+    `<span>HP <b>${p.hp}</b>/${p.maxhp}<span class="bar"><i style="width:${hpPct}%;background:${hpPct<30?'#ff6a5a':'#7fe07f'}"></i></span></span>`+
+    `<span>Full <b style="color:${p.full<=20?'#f0c060':'#fff'}">${p.full}%</b></span><span class="dim">T${G.turn} · wind ${wa} · on ${TNAME[t]}</span>`;
+}
+function renderLog(){const el=$('#log');if(!el)return;el.innerHTML=G.log.slice(-4).map((l,k,a)=>`<div class="${l.cls}" style="opacity:${0.45+0.55*(k+1)/a.length}">${l.msg}</div>`).join('')}
+function setFace(on){faceMode=on;$('#faceBtn').classList.toggle('on',on)}
+function modalOpen(){return !$('#modal').hidden}
+function closeModal(){$('#modal').hidden=true;G.aimPreview=false}
+function openModal(html){$('#sheet').innerHTML=html;$('#modal').hidden=false}
+$('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal'&&!G.over)closeModal()});
+
+let invSel=0;
+function openInv(){
+  if(G.over)return;const inv=G.player.inv;
+  if(!inv.length){say('Your bag is empty.','dim');return}
+  invSel=Math.min(invSel,inv.length-1);G.aimPreview=true;
+  const it=inv[invSel],d=ITEMS[it.kind],dir=ARROWS[G.player.face.join(',')];
+  openModal(`<h3>BAG ${inv.length}/12 · FACING ${dir}</h3>`+
+    inv.map((it,k)=>{const d=ITEMS[it.kind];return `<div class="row ${k===invSel?'sel':''}" data-k="${k}"><span class="g" style="color:${d.color}">${d.ch}</span>${itemName(it)}</div>`}).join('')+
+    `<div class="desc">${d.desc}</div><div class="btns">`+
+    (d.use?`<button data-op="use">${d.staff?'ZAP '+dir:'USE'}</button>`:'')+
+    `<button data-op="throw">THROW ${dir}</button><button data-op="drop">DROP</button><button data-op="close">CLOSE</button></div>`);
+  $('#sheet').querySelectorAll('.row').forEach(r=>r.onclick=()=>{invSel=+r.dataset.k;openInv()});
+  $('#sheet').querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{
+    const op=b.dataset.op;closeModal();if(op==='close')return;
+    if(op==='use')useItem(invSel);else if(op==='throw')throwItem(invSel);else dropItem(invSel);
+    endTurn();
+  });
+}
+function openParams(){
+  let h=`<h3>ENGINE PARAMETERS</h3><div class="note">Changes apply live to the running world. Same seed + same inputs + same params = the same run, every time.</div>`;
+  for(const d of PARAM_DEFS){
+    if(d.select)h+=`<div class="prm"><label>${d.label}</label><select data-k="${d.k}">${d.select.map(o=>`<option ${o===P[d.k]?'selected':''}>${o}</option>`).join('')}</select><span></span></div>`;
+    else h+=`<div class="prm"><label>${d.label}</label><input type="range" data-k="${d.k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${P[d.k]}"><span>${P[d.k]}</span></div>`;
+  }
+  h+=`<div class="prm" style="margin-top:8px"><label>Seed</label><input type="number" id="seedIn" value="${P.seed}"><span></span></div>
+  <div class="note">State hash: <b style="color:#fff">${stateHash()}</b> (turn ${G.turn})</div>
+  <div class="btns"><button id="rs">RESTART SEED</button><button id="rr">RANDOM SEED</button><button id="pc">CLOSE</button></div>`;
+  openModal(h);
+  $('#sheet').querySelectorAll('[data-k]').forEach(el=>el.oninput=()=>{const k=el.dataset.k;P[k]=el.tagName==='SELECT'?el.value:+el.value;
+    if(el.nextElementSibling)el.nextElementSibling.textContent=el.value;if(k==='zoom')resize();if(k==='lightRadius')computeView();updateHUD()});
+  $('#rs').onclick=()=>{closeModal();G.log=[];newRun(+$('#seedIn').value||0)};
+  $('#rr').onclick=()=>{closeModal();G.log=[];newRun((Math.random()*1e9)>>>0)};
+  $('#pc').onclick=closeModal;
+}
+function showEnd(title,body){
+  openModal(`<h3>${title}</h3><div class="desc">${body}<br>Seed ${P.seed}</div><div class="btns"><button id="e1">SAME SEED</button><button id="e2">NEW SEED</button></div>`);
+  $('#e1').onclick=()=>{closeModal();newRun(P.seed)};$('#e2').onclick=()=>{closeModal();newRun((Math.random()*1e9)>>>0)};
+}
+function doAction(a){
+  if(modalOpen())return;
+  if(a==='face'){setFace(!faceMode);return}
+  if(a==='items')openInv();if(a==='stairs')descend();if(a==='params')openParams();
+}
+// touch controls with hold-to-repeat (stops when a monster is in view)
+let rep=null;
+function anyMonsterVisible(){return G.ents.some(m=>G.vis[idx(m.x,m.y)])}
+document.querySelectorAll('#dpad button').forEach(b=>{
+  const [dx,dy]=b.dataset.d.split(',').map(Number);
+  const stop=()=>{clearTimeout(rep);clearInterval(rep);rep=null};
+  b.addEventListener('pointerdown',e=>{e.preventDefault();if(modalOpen())return;stop();playerMove(dx,dy);
+    if(dx||dy)rep=setTimeout(()=>{rep=setInterval(()=>{if(modalOpen()||G.over||anyMonsterVisible()||faceMode){stop();return}playerMove(dx,dy)},110)},320)});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,stop));
+});
+document.querySelectorAll('#acts button').forEach(b=>b.addEventListener('click',()=>doAction(b.dataset.a)));
+const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],k:[0,-1],j:[0,1],h:[-1,0],l:[1,0],y:[-1,-1],u:[1,-1],b:[-1,1],n:[1,1],
+  '8':[0,-1],'2':[0,1],'4':[-1,0],'6':[1,0],'7':[-1,-1],'9':[1,-1],'1':[-1,1],'3':[1,1],'5':[0,0],'.':[0,0],' ':[0,0]};
+window.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if(modalOpen()&&!G.over)closeModal();setFace(false);return}
+  if(modalOpen()||e.target.tagName==='INPUT')return;
+  const key=e.key.length===1?e.key.toLowerCase():e.key;
+  const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
+  if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])){G.player.face=[d[0],d[1]];updateHUD();return}playerMove(d[0],d[1]);return}
+  if(key==='i'){e.preventDefault();openInv()}else if(key==='f')setFace(!faceMode);else if(key==='>'||key==='Enter')descend();else if(key==='p')openParams();
+});
+window.addEventListener('resize',resize);
+
+newRun(P.seed);
+resize();
+const start=()=>{resize();requestAnimationFrame(loop)};
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(start,start);
+</script>
+</body>
+</html>

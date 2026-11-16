@@ -4,6 +4,17 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.10.0 — Full keyboard play, item stacks
+- Every menu works from the keyboard: ↑↓ select items, ←→ pick an action, Enter does it,
+  Esc goes back; letter hotkeys on every action (hints show on keyboard devices).
+- Aim screen: direction keys turn you, 1–9 jumps to a visible enemy, Enter throws.
+- Engine panel: ↑↓ between controls, ←→ change sliders and choices.
+- `?` opens a keyboard reference. Sandbox: `G` paints the tile you face, `,` opens its menu.
+- Item stacks: Lumber and Dry Grass (20), Seeds and Herbs (10) share one slot.
+  Stacks merge on pickup, in bags and on the floor; SPLIT (1, 5, 10 or half) and COMBINE.
+  Throwing, building and eating use one from the stack; a lumber stack in fire makes a bigger campfire.
+- Fix: a monster created in view (spawned or painted in the sandbox) no longer crashes the vision cones.
+
 ## v0.9.0 — Lighting & stealth (experimental)
 - Real light map: walls and thick smoke cast shadows; ~35% of rooms start dark.
   Fire, campfires, fireflies, electrified water and lightning are light sources.

@@ -134,7 +134,21 @@ const FINAL_FLOOR=10;
 let G=null, faceMode=false, SB=null;
 
 function pickW(list,r){let s=0;for(const [,w] of list)s+=w;let v=r*s;for(const [k,w] of list){if((v-=w)<0)return k}return list[0][0]}
-function mkItem(kind){const it={kind};if(ITEMS[kind].staff)it.charges=3+Math.floor(G.rng()*3);if(kind==='meat')it.age=0;
+const STACK={lumber:20,dryGrass:20,seeds:10,herb:10};
+const qty=it=>it.n||1;
+// merge `it` into same-kind stacks of `list`; returns what is left over (or null)
+function mergeInto(list,it){const max=STACK[it.kind];if(!max)return it;
+  for(const o of list){if(o===it||o.kind!==it.kind||qty(o)>=max)continue;const mv=Math.min(max-qty(o),qty(it));o.n=qty(o)+mv;it.n=qty(it)-mv;if(it.n<=0)return null}
+  return it}
+// put an item (or stack) into the pack: fills existing stacks first, then free slots. false = some is left in `it`
+function addToPack(it){const p=G.player,max=STACK[it.kind];let left=mergeInto(p.inv,it);
+  while(left){if(p.inv.length>=12)return false;
+    if(max&&qty(left)>max){p.inv.push(Object.assign({},left,{n:max}));left.n-=max}else{p.inv.push(left);left=null}}
+  return true}
+function placeFloor(x,y,it){if(STACK[it.kind]){const o=G.floorItems.find(f=>f.x===x&&f.y===y&&f.it.kind===it.kind);if(o){o.it.n=qty(o.it)+qty(it);return}}G.floorItems.push({x,y,it})}
+// take one unit from a stack (or the whole item if it is not stacked)
+function takeOne(list,k){const it=list[k];if(qty(it)>1){it.n--;return Object.assign({},it,{n:1})}return list.splice(k,1)[0]}
+function mkItem(kind){const it={kind};if(STACK[kind])it.n=1;if(ITEMS[kind].staff)it.charges=3+Math.floor(G.rng()*3);if(kind==='meat')it.age=0;
   if(kind==='weapon'){it.w=pickW([['dagger',4],['club',4],['katana',2],['pickaxe',2]],G.rng());it.plus=G.rng()<0.3?1:0;it.seals=[]}
   if(ITEMS[kind].bag)it.items=[];
   if(kind==='gold')it.amt=Math.round((10+G.rng()*20)*Math.max(1,G.depth));
@@ -145,11 +159,12 @@ function itemName(it){
   if(it.kind==='weapon'){const w=WEAPONS[it.w];return `${w.name}${it.plus?(it.plus>0?'+':'')+it.plus:''}${it.seals.length?' ['+it.seals.map(s=>SEALS[s].tag).join('')+']':''}`}
   if(isBag(it))return `${ITEMS[it.kind].name} (${it.items.length}/${ITEMS[it.kind].bag})`;
   if(it.kind==='gold')return `${it.amt} gold`;
+  if(qty(it)>1)return `${ITEMS[it.kind].name} ×${qty(it)}`;
   return ITEMS[it.kind].name+(it.charges!=null?` [${it.charges}]`:'')+(it.frozen?' (frozen)':'')}
 function atkOf(e){return e.isPlayer&&e.weapon?e.atk+WEAPONS[e.weapon.w].atk+e.weapon.plus:e.atk}
 function mkMonster(kind,x,y){const d=MON[kind],dp=G.depth-1,hp=d.hp+Math.floor(dp*1.2);
-  return Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,
-    dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid,face:null})}
+  const m=Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,
+    dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid,face:null});m.face=DIRS8[m.dir];return m}
 
 // ---------------- run / floor setup ----------------
 function newRun(seed){
@@ -158,7 +173,7 @@ function newRun(seed){
      player:{x:0,y:0,ch:'@',name:'you',hp:24,maxhp:24,atk:2,def:1,lv:1,xp:0,full:100,face:[0,1],inv:[],isPlayer:true,stuck:0,gold:0,weapon:null},npc:null};
   nextFloor();
   const dg=mkWeapon('dagger');G.player.inv.push(dg,mkItem('onigiri'),mkItem('fireStaff'),mkItem('oilJar'),mkItem('galeStaff'),mkItem('pouch'));G.player.weapon=dg;
-  say('Shift+dir or FACE to turn without moving. Staffs & throws fire where @ faces.','dim');
+  say('Shift+dir or FACE to turn without moving. Staffs & throws fire where @ faces. Press ? for keyboard controls.','dim');
   updateHUD();
 }
 function nextFloor(){
@@ -177,7 +192,8 @@ function nextFloor(){
   const n=Math.round((4+G.depth*0.7)*P.monsterDensity);
   for(let k=0;k<n;k++)spawnMonster(true);
   const ni=5+Math.floor(G.rng()*3);
-  for(let k=0;k<ni;k++){const c=randomRoomCell(c=>!COLD(G.tile[c])&&G.tile[c]!==T_VINE);G.floorItems.push({x:c%W,y:(c/W)|0,it:mkItem(pickW(ITEM_W,G.rng()))})}
+  for(let k=0;k<ni;k++){const c=randomRoomCell(c=>!COLD(G.tile[c])&&G.tile[c]!==T_VINE),it=mkItem(pickW(ITEM_W,G.rng()));
+    if(it.kind==='lumber')it.n=1+Math.floor(G.rng()*3);else if(it.kind==='dryGrass')it.n=1+Math.floor(G.rng()*4);placeFloor(c%W,(c/W)|0,it)}
   if(G.rng()<0.6)spawnCamp(true);
   G.lit=false;G.storm=null;
   const ng=1+Math.floor(G.rng()*3);for(let k=0;k<ng;k++){const c=randomRoomCell(c=>!COLD(G.tile[c])&&G.tile[c]!==T_VINE);G.floorItems.push({x:c%W,y:(c/W)|0,it:mkItem('gold')})}
@@ -264,14 +280,14 @@ function spawnCamp(initial){
   const c=randomRoomCell(c=>[T_FLOOR,T_DIRT,T_ASH].includes(G.tile[c])&&(initial||!G.vis[c]));
   if(!initial&&G.vis[c])return;
   const x=c%W,y=(c/W)|0;G.tile[c]=T_CAMP;G.fuel[c]=60+Math.floor(G.rng()*80);G.heat[c]=0.95;
-  if(G.rng()<0.5){const d=DIRS8[Math.floor(G.rng()*8)];if(walkable(x+d[0],y+d[1]))G.floorItems.push({x:x+d[0],y:y+d[1],it:mkItem(G.rng()<0.6?'lumber':'dryGrass')})}
+  if(G.rng()<0.5){const d=DIRS8[Math.floor(G.rng()*8)];if(walkable(x+d[0],y+d[1])){const it=mkItem(G.rng()<0.6?'lumber':'dryGrass');it.n=1+Math.floor(G.rng()*3);placeFloor(x+d[0],y+d[1],it)}}
   if(!initial)say('You smell woodsmoke somewhere on this floor.','dim');
 }
 function nextToCamp(){const p=G.player;for(const [dx,dy] of DIRS8){const x=p.x+dx,y=p.y+dy;if(inb(x,y)&&G.tile[idx(x,y)]===T_CAMP)return true}return false}
 // find an item in pack or bags: returns [container,index]
 function findItem(kind){const p=G.player;let k=p.inv.findIndex(x=>x.kind===kind);if(k>=0)return [p.inv,k];
   for(const b of p.inv)if(isBag(b)){k=b.items.findIndex(x=>x.kind===kind);if(k>=0)return [b.items,k]}return null}
-function removeFound([arr,k]){return arr.splice(k,1)[0]}
+function removeFound([arr,k]){return takeOne(arr,k)}
 const BUILD_OK=[T_FLOOR,T_DIRT,T_ASH,T_GRASS,T_OIL];
 function buildCampfire(){
   const p=G.player,[dx,dy]=p.face,x=p.x+dx,y=p.y+dy,i=idx(x,y);
@@ -335,7 +351,7 @@ function computeView(){
   computeCones();buildMinimap();
 }
 // ---------------- perception ----------------
-function facingDot(m,x,y){const [fx,fy]=m.face,vx=x-m.x,vy=y-m.y,l=Math.hypot(vx,vy);if(!l)return 1;return (fx*vx+fy*vy)/(Math.hypot(fx,fy)*l)}
+function facingDot(m,x,y){const [fx,fy]=m.face||DIRS8[m.dir||0],vx=x-m.x,vy=y-m.y,l=Math.hypot(vx,vy);if(!l)return 1;return (fx*vx+fy*vy)/(Math.hypot(fx,fy)*l)}
 function detects(m){
   const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(d>9||!los(m.x,m.y,p.x,p.y))return false;
   const dot=facingDot(m,p.x,p.y);
@@ -538,8 +554,9 @@ function worldStep(){
     const i=idx(fi.x,fi.y),ti=G.tile[i];if(ti!==T_FIRE&&ti!==T_CAMP)continue;
     const k=fi.it.kind,vis=G.vis[i];
     if(k==='lumber'){G.floorItems.splice(G.floorItems.indexOf(fi),1);
-      if(ti===T_CAMP){G.fuel[i]=Math.min(9999,G.fuel[i]+60);if(vis)say('The lumber catches. The campfire roars higher.','fire')}
-      else{G.tile[i]=T_CAMP;G.fuel[i]=80;if(vis)say('Burning lumber settles into a steady campfire.','fire')}continue}
+      const n=qty(fi.it);
+      if(ti===T_CAMP){G.fuel[i]=Math.min(9999,G.fuel[i]+60*n);if(vis)say(`The lumber catches. The campfire roars higher. (+${60*n} fuel)`,'fire')}
+      else{G.tile[i]=T_CAMP;G.fuel[i]=Math.min(9999,80+60*(n-1));if(vis)say('Burning lumber settles into a steady campfire.','fire')}continue}
     if(isBag(fi.it)&&ITEMS[k].fireproof)continue;
     if(isBag(fi.it)){G.floorItems.splice(G.floorItems.indexOf(fi),1);if(vis)say(`The ${ITEMS[k].name} burns away, spilling its contents!`,'fire');scatter(fi.x,fi.y,fi.it.items);continue}
     if(k==='onigiri'){fi.it.kind='grilled';if(vis)say('An onigiri sizzles in the flames… grilled!','fire')}
@@ -790,7 +807,7 @@ function playerMove(dx,dy){
     if(k){removeFound(k);G.fuel[ci]=Math.min(9999,G.fuel[ci]+60);say(`You feed lumber to the campfire. (${G.fuel[ci]} turns of fuel)`,'fire');endTurn()}
     else say(`The campfire crackles — ${G.fuel[ci]} turns of fuel left. Lumber would keep it going.`,'dim');return}
   if(t===T_VINE){G.tile[idx(nx,ny)]=T_GRASS;say('You hack through the vines.','dim');
-    if(h01(P.seed,G.turn,idx(nx,ny),50)<0.5){G.floorItems.push({x:nx,y:ny,it:mkItem('dryGrass')});say('Some dry grass falls loose.','dim')}endTurn();return}
+    if(h01(P.seed,G.turn,idx(nx,ny),50)<0.5){placeFloor(nx,ny,mkItem('dryGrass'));say('Some dry grass falls loose.','dim')}endTurn();return}
   if(t===T_VINE_ICE){G.tile[idx(nx,ny)]=T_FLOOR;say('The frozen vines shatter!','ice');fxGlyph(nx,ny,'*','#bff6ff')}
   else if(t===T_WALL)return;
   p.x=nx;p.y=ny;
@@ -803,8 +820,10 @@ function playerMove(dx,dy){
 function pickupAt(x,y){
   for(let k=G.floorItems.length-1;k>=0;k--){const f=G.floorItems[k];if(f.x!==x||f.y!==y)continue;
     if(f.it.kind==='gold'){G.player.gold+=f.it.amt;G.floorItems.splice(k,1);say(`Picked up ${f.it.amt} gold.`,'good');continue}
-    if(G.player.inv.length>=12){say(`Your bag is full. ${itemName(f.it)} stays here.`,'warn');continue}
-    G.player.inv.push(f.it);G.floorItems.splice(k,1);say(`Picked up ${itemName(f.it)}.`,'good')}
+    const name=itemName(f.it),before=qty(f.it);
+    if(addToPack(f.it)){G.floorItems.splice(k,1);say(`Picked up ${name}.`,'good')}
+    else if(qty(f.it)<before)say(`Picked up ${before-qty(f.it)} — your pack is full, ${itemName(f.it)} stays here.`,'warn');
+    else say(`Your pack is full. ${name} stays here.`,'warn')}
 }
 function descend(){
   const p=G.player;if(G.over)return;
@@ -856,7 +875,7 @@ function gale(path){
     fxGlyph(nx,ny,'^','#ff8a3d',60,260)}
   for(const [x,y] of path){const e=entAt(x,y);if(e){const n=knockback(e,dx,dy,3);if(seenBy(e.x,e.y))say(`The ${e.name} is hurled ${n} tiles!`,'warn');break}}
 }
-function throwItem(k){return throwIt(G.player.inv.splice(k,1)[0])}
+function throwItem(k){return throwIt(takeOne(G.player.inv,k))}
 function throwIt(it){
   const p=G.player,d=ITEMS[it.kind];
   if(it===p.weapon)p.weapon=null;
@@ -882,7 +901,7 @@ function throwIt(it){
     hurt(hit,it.kind==='weapon'?WEAPONS[it.w].atk+it.plus+2:2,'you');
   }
   if(G.tile[idx(lx,ly)]===T_WATER&&!hit){say(`The ${d.name} sinks.`,'dim');return}
-  G.floorItems.push({x:hit&&!hit.dead?hit.x:lx,y:hit&&!hit.dead?hit.y:ly,it});
+  placeFloor(hit&&!hit.dead?hit.x:lx,hit&&!hit.dead?hit.y:ly,it);
 }
 function useItem(k,bag){
   const p=G.player,it=p.inv[k],d=ITEMS[it.kind];
@@ -896,7 +915,7 @@ function useItem(k,bag){
   if(d.staff){
     if(it.charges<=0){say('Nothing happens. The staff is spent.','dim');return true}
     it.charges--;zap({fireStaff:'fire',iceStaff:'ice',boltStaff:'bolt',galeStaff:'gale'}[it.kind]);return true}
-  p.inv.splice(k,1);
+  takeOne(p.inv,k);
   const area=(r,fn)=>{for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const x=p.x+dx,y=p.y+dy;if(!inb(x,y)||Math.hypot(dx,dy)>r+0.3||!los(p.x,p.y,x,y))continue;fn(x,y,idx(x,y),Math.hypot(dx,dy))}};
   switch(it.kind){
     case 'honing':if(p.weapon){p.weapon.plus++;say(`Your weapon gleams: ${itemName(p.weapon)}.`,'good')}else say('Your empty hands tingle. Nothing happens.','dim');break;
@@ -927,8 +946,8 @@ function useItem(k,bag){
 function scatter(x,y,items){
   const spots=[[0,0],...DIRS8];let k=0;
   for(const ci of items){let placed=false;
-    for(let tries=0;tries<9&&!placed;tries++,k++){const s=spots[k%9],nx=x+s[0],ny=y+s[1];if(walkable(nx,ny)){G.floorItems.push({x:nx,y:ny,it:ci});placed=true}}
-    if(!placed)G.floorItems.push({x,y,it:ci})}
+    for(let tries=0;tries<9&&!placed;tries++,k++){const s=spots[k%9],nx=x+s[0],ny=y+s[1];if(walkable(nx,ny)){placeFloor(nx,ny,ci);placed=true}}
+    if(!placed)placeFloor(x,y,ci)}
 }
 function bagScroll(kind,bag){
   const p=G.player,bn=ITEMS[bag.kind].name,ws=bag.items.filter(x=>x.kind==='weapon'),d=ITEMS[kind];
@@ -957,7 +976,7 @@ function bagScroll(kind,bag){
       break}
   }
 }
-function dropItem(k){const p=G.player,it=p.inv.splice(k,1)[0];if(it===p.weapon)p.weapon=null;G.floorItems.push({x:p.x,y:p.y,it});say(`Dropped ${itemName(it)}.`)}
+function dropItem(k){const p=G.player,it=p.inv.splice(k,1)[0];if(it===p.weapon)p.weapon=null;placeFloor(p.x,p.y,it);say(`Dropped ${itemName(it)}.`)}
 
 function gameOver(){G.over=true;say(`You were felled by ${G.cause||'something'} on B${G.depth}F.`,'bad');
   const g0=G;setTimeout(()=>G===g0&&showEnd(`FELLED ON B${G.depth}F`,`Killed by ${G.cause||'something'} on turn ${G.turn}, at Lv${G.player.lv}.`),500)}
@@ -1166,13 +1185,15 @@ function updateHUD(){
 function renderLog(){const el=$('#log');if(!el)return;el.innerHTML=G.log.slice(-4).map((l,k,a)=>`<div class="${l.cls}" style="opacity:${0.45+0.55*(k+1)/a.length}">${l.msg}</div>`).join('')}
 function setFace(on){faceMode=on;const b=$('#faceBtn');if(b)b.classList.toggle('on',on)}
 function modalOpen(){return !$('#modal').hidden}
-function closeModal(){$('#modal').hidden=true;G.aimPreview=false}
-function openModal(html,cls){$('#sheet').innerHTML=html;const m=$('#modal');m.className='modal'+(cls?' '+cls:'');m.hidden=false;$('#sheet').scrollTop=0}
+function closeModal(){$('#modal').hidden=true;G.aimPreview=false;const ae=document.activeElement;if(ae&&$('#sheet').contains(ae))ae.blur()}
+function openModal(html,cls){$('#sheet').innerHTML=html;const m=$('#modal');m.className='modal'+(cls?' '+cls:'');m.hidden=false;$('#sheet').scrollTop=0;kbAfterRender()}
 $('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal'&&!G.over)closeModal()});
-function bindOps(map){$('#sheet').querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)})}
-function choose(title,opts){
-  openModal(`<h3>${title}</h3>`+opts.map((o,k)=>`<div class="row" data-op="c${k}"><span class="g" style="color:${o.color||'#cfd6e0'}">${o.ch||'›'}</span>${o.label}</div>`).join('')+`<div class="btns"><button data-op="back">BACK</button></div>`);
-  const map={back:()=>openInv()};opts.forEach((o,k)=>map['c'+k]=o.fn);bindOps(map);
+const OPKEYS={merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
+function bindOps(map){$('#sheet').querySelectorAll('[data-op]').forEach(b=>{b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)};
+  const k=OPKEYS[b.dataset.op];if(k&&b.tagName==='BUTTON'&&!b.dataset.key){b.dataset.key=k;b.insertAdjacentHTML('afterbegin',`<span class="kh">${k.toUpperCase()}</span>`)}});kbAfterRender()}
+function choose(title,opts,back){
+  openModal(`<h3>${title}</h3>`+opts.map((o,k)=>`<div class="row" tabindex="-1" data-op="c${k}"><span class="g" style="color:${o.color||'#cfd6e0'}">${o.ch||'›'}</span>${o.label}</div>`).join('')+`<div class="btns"><button data-op="back">BACK</button></div>`);
+  const map={back:back||(()=>openInv())};opts.forEach((o,k)=>map['c'+k]=o.fn);bindOps(map);
 }
 
 // ---------------- cooking ----------------
@@ -1201,7 +1222,7 @@ function openAim(it,onFire,back){
     p.face=[sgn(dx),sgn(dy)];const r=rayPath(10,true);if(r.hit===m)quick.push([p.face,m])}
   p.face=saved;
   const cur=p.face.join(',');
-  openModal(`<h3>THROW ${itemName(it).toUpperCase()} — AIM</h3>
+  openModal(`<h3>THROW ${(qty(it)>1?'1 '+ITEMS[it.kind].name:itemName(it)).toUpperCase()} — AIM</h3>
     <div class="aim"><div class="aimgrid">${DG.map((d,k)=>d?`<button data-op="d${k}" class="${d.join(',')===cur?'on':''}">${ARROWS[d.join(',')]}</button>`:'<span>@</span>').join('')}</div>
     <div class="desc" style="margin:0;flex:1">Facing <b style="color:#ff8a3d">${ARROWS[cur]}</b>. ${info}<br><span class="dim">Check the line on the map, then confirm.</span></div></div>
     ${quick.length?`<div class="chips">${quick.map(([f,m],k)=>`<button class="chip" data-op="q${k}" style="color:${m.color}">${ARROWS[f.join(',')]} ${m.name}</button>`).join('')}</div>`:''}
@@ -1216,7 +1237,7 @@ function openAim(it,onFire,back){
 let invSel=0,invBag=null,bagSel=0;
 const FOOD=['onigiri','grilled','meat','cooked','rotten'];
 function bagsIn(exclude){return G.player.inv.filter(x=>isBag(x)&&x!==exclude)}
-function rowHtml(it,k,sel,eq){const d=ITEMS[it.kind];return `<div class="row ${k===sel?'sel':''}" data-op="r${k}"><span class="g" style="color:${d.color}">${d.ch}</span>${itemName(it)}${eq?' <span style="color:#ff8a3d;margin-left:auto">E</span>':''}</div>`}
+function rowHtml(it,k,sel,eq){const d=ITEMS[it.kind];return `<div class="row selrow ${k===sel?'sel':''}" tabindex="-1" data-op="r${k}"><span class="g" style="color:${d.color}">${d.ch}</span>${itemName(it)}${eq?' <span style="color:#ff8a3d;margin-left:auto">E</span>':''}</div>`}
 function act(fn){closeModal();if(fn()!==false)endTurn()}
 function openInv(){
   if(G.over)return;const p=G.player,inv=p.inv;
@@ -1224,7 +1245,7 @@ function openInv(){
   if(invBag)return openBagView();
   if(!inv.length){say('Your pack is empty.','dim');return}
   invSel=clamp(invSel,0,inv.length-1);G.aimPreview=true;
-  const it=inv[invSel],d=ITEMS[it.kind],dir=ARROWS[p.face.join(',')],bags=bagsIn(it).filter(b=>b.items.length<ITEMS[b.kind].bag);
+  const it=inv[invSel],d=ITEMS[it.kind],dir=ARROWS[p.face.join(',')],bags=bagsIn(it).filter(b=>bagRoomFor(b,it));
   let btns='';
   if(it.kind==='weapon')btns+=`<button data-op="equip">${it===p.weapon?'UNEQUIP':'EQUIP'}</button>`;
   else if(isBag(it))btns+=`<button data-op="open">OPEN</button>`;
@@ -1233,8 +1254,10 @@ function openInv(){
   const raw=rawFoods();if(COOKS[it.kind]&&cookSource())btns+=`<button data-op="cook">COOK</button>`;
   if(raw.length>1&&cookSource())btns+=`<button data-op="cookall">COOK ALL (${raw.length})</button>`;
   if(!isBag(it)&&bagsIn(it).length)btns+=`<button data-op="put" ${bags.length?'':'disabled'}>PUT IN BAG</button>`;
+  if(qty(it)>1)btns+=`<button data-op="split" ${inv.length<12?'':'disabled'}>SPLIT</button>`;
+  if(STACK[it.kind]&&inv.some(o=>o!==it&&o.kind===it.kind&&qty(o)<STACK[it.kind]))btns+=`<button data-op="merge">COMBINE</button>`;
   btns+=`<button data-op="throw">THROW ${dir}</button><button data-op="drop">DROP</button><button data-op="close">CLOSE</button>`;
-  let extra='';if(it.kind==='weapon'){const w=WEAPONS[it.w];extra=` Power ${w.atk}${it.plus?(it.plus>0?' +':' ')+it.plus:''}.${w.dig?' Bump walls to dig through them.':''}${it.seals.length?' Seals: '+it.seals.map(s=>SEALS[s].name).join(', ')+'.':''}`}
+  let extra=STACK[it.kind]?` Stacks up to ${STACK[it.kind]}.`:'';if(it.kind==='weapon'){const w=WEAPONS[it.w];extra=` Power ${w.atk}${it.plus?(it.plus>0?' +':' ')+it.plus:''}.${w.dig?' Bump walls to dig through them.':''}${it.seals.length?' Seals: '+it.seals.map(s=>SEALS[s].name).join(', ')+'.':''}`}
   if(isBag(it))extra=it.items.length?' Inside: '+it.items.map(itemName).join(', ')+'.':' Empty.';
   extra+=cookHint(it);
   openModal(`<h3>PACK ${inv.length}/12 · $${p.gold} · FACING ${dir}</h3>`+inv.map((x,k)=>rowHtml(x,k,invSel,x===p.weapon)).join('')+
@@ -1245,6 +1268,8 @@ function openInv(){
     put:()=>{if(bags.length===1)putIn(it,bags[0]);else choose('PUT INTO WHICH BAG?',bags.map(b=>({label:itemName(b),ch:'(',color:ITEMS[b.kind].color,fn:()=>putIn(it,b)})))},
     throw:()=>openAim(it,()=>throwItem(invSel),openInv),
     cook:()=>act(()=>cookItems([it])),
+    split:()=>splitMenu(inv,it,12,openInv),
+    merge:()=>{const left=mergeInto(inv,it);if(!left){inv.splice(inv.indexOf(it),1);invSel=Math.max(0,invSel-1)}say('You combine the stacks.');openInv()},
     build:()=>act(()=>buildCampfire()),
     cookall:()=>act(()=>cookItems(rawFoods())),
     drop:()=>act(()=>{dropItem(invSel)}),
@@ -1257,8 +1282,20 @@ function openInv(){
   inv.forEach((x,k)=>map['r'+k]=()=>{invSel=k;openInv()});
   bindOps(map);
 }
-function putIn(it,bag){const p=G.player;if(bag.items.length>=ITEMS[bag.kind].bag){say('That bag is full.','dim');return openInv()}
-  p.inv.splice(p.inv.indexOf(it),1);if(it===p.weapon)p.weapon=null;bag.items.push(it);say(`You put the ${itemName(it)} in the ${ITEMS[bag.kind].name}.`);updateHUD();invSel=Math.max(0,invSel-1);openInv()}
+function bagRoomFor(b,it){return b.items.length<ITEMS[b.kind].bag||(STACK[it.kind]&&b.items.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))}
+function putIn(it,bag){const p=G.player,bn=ITEMS[bag.kind].name,name=itemName(it),before=qty(it);
+  if(!bagRoomFor(bag,it)){say('That bag is full.','dim');return openInv()}
+  let left=mergeInto(bag.items,it);
+  if(left&&bag.items.length<ITEMS[bag.kind].bag){bag.items.push(left);left=null}
+  if(!left){p.inv.splice(p.inv.indexOf(it),1);if(it===p.weapon)p.weapon=null;say(`You put the ${name} in the ${bn}.`);invSel=Math.max(0,invSel-1)}
+  else say(`You fit ${before-qty(it)} into the ${bn}; it's full. ${itemName(it)} stays in your pack.`,'warn');
+  updateHUD();openInv()}
+function splitMenu(list,it,cap,back){
+  const n=qty(it);if(n<2){say('There is nothing to split.','dim');return back()}
+  if(list.length>=cap){say('No free slot to split into.','warn');return back()}
+  const amts=[...new Set([1,5,10,Math.floor(n/2)].filter(a=>a>=1&&a<n))].sort((a,b)=>a-b);
+  choose(`SPLIT ${itemName(it).toUpperCase()}`,amts.map(a=>({label:`Split off ${a}${a===Math.floor(n/2)?' (half)':''} → ${n-a} + ${a}`,ch:ITEMS[it.kind].ch,color:ITEMS[it.kind].color,
+    fn:()=>{it.n=n-a;list.splice(list.indexOf(it)+1,0,Object.assign({},it,{n:a}));say(`Split into ${n-a} and ${a}.`);back()}})),back)}
 function openBagView(){
   const p=G.player,b=invBag,bd=ITEMS[b.kind],items=b.items;
   bagSel=clamp(bagSel,0,Math.max(0,items.length-1));
@@ -1266,10 +1303,11 @@ function openBagView(){
   openModal(`<h3>${bd.name.toUpperCase()} ${items.length}/${bd.bag}${bd.fireproof?' · FIREPROOF':''}</h3>`+
     (items.length?items.map((x,k)=>rowHtml(x,k,bagSel)).join(''):`<div class="desc">Empty. Select an item in your pack and choose PUT IN BAG.</div>`)+
     (it?`<div class="desc">${ITEMS[it.kind].desc}${cookHint(it)}</div>`:'')+
-    `<div class="btns">${it?`<button data-op="take" ${p.inv.length>=12?'disabled':''}>TAKE OUT</button><button data-op="throw">THROW ${ARROWS[p.face.join(',')]}</button>`+(COOKS[it.kind]&&cookSource()?`<button data-op="cook">COOK</button>`:''):''}<button data-op="back">BACK</button><button data-op="close">CLOSE</button></div>`);
+    `<div class="btns">${it?`<button data-op="take" ${p.inv.length>=12&&!(STACK[it.kind]&&p.inv.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))?'disabled':''}>TAKE OUT</button><button data-op="throw">THROW ${ARROWS[p.face.join(',')]}</button>`+(COOKS[it.kind]&&cookSource()?`<button data-op="cook">COOK</button>`:'')+(qty(it)>1?`<button data-op="split" ${items.length<bd.bag?'':'disabled'}>SPLIT</button>`:''):''}<button data-op="back">BACK</button><button data-op="close">CLOSE</button></div>`);
   const map={close:()=>{invBag=null;closeModal()},back:()=>{invBag=null;openInv()},
-    take:()=>{items.splice(bagSel,1);p.inv.push(it);say(`You take the ${itemName(it)} out.`);openInv()},
-    throw:()=>openAim(it,()=>{const k=b.items.indexOf(it);if(k>=0)b.items.splice(k,1);say(`You pull the ${itemName(it)} from the ${bd.name}…`,'dim');throwIt(it)},openBagView),
+    take:()=>{const k=items.indexOf(it),name=itemName(it);if(addToPack(it)){items.splice(k,1);say(`You take the ${name} out.`)}else say(`Your pack is full — ${itemName(it)} stays in the ${bd.name}.`,'warn');updateHUD();openInv()},
+    split:()=>splitMenu(items,it,bd.bag,openBagView),
+    throw:()=>openAim(it,()=>{const k=b.items.indexOf(it);if(k<0)return;const one=takeOne(b.items,k);say(`You pull the ${itemName(one)} from the ${bd.name}…`,'dim');throwIt(one)},openBagView),
     cook:()=>act(()=>cookItems([it]))};
   items.forEach((x,k)=>map['r'+k]=()=>{bagSel=k;openBagView()});
   bindOps(map);
@@ -1337,7 +1375,7 @@ function enterSandbox(){
   buildArena();
   const kw=mkWeapon('katana');p.weapon=kw;
   p.inv.push(kw);for(const k of ['fireStaff','iceStaff','boltStaff','galeStaff']){const s=mkItem(k);s.charges=99;p.inv.push(s)}
-  p.inv.push(mkItem('satchel'),mkItem('oilJar'),mkItem('miasma'),mkItem('honing'),mkItem('smelting'));
+  p.inv.push(mkItem('satchel'),mkItem('oilJar'),mkItem('miasma'),mkItem('honing'),mkItem('smelting'),Object.assign(mkItem('lumber'),{n:20}),Object.assign(mkItem('dryGrass'),{n:20}));
   camX=p.x;camY=p.y;
   say('SANDBOX — tap or drag on the map to paint. STEP = one turn, RUN = continuous. You are invulnerable; monster AI starts off.','warn');
   setActs();computeView();updateHUD();
@@ -1515,6 +1553,60 @@ function exploreTick(){
   if(p.x===ox&&p.y===oy&&G.tile[j]===ot){if(++expStall>3)return stopExplore('Exploration is stuck.','warn')}else expStall=0;
 }
 
+// ---------------- KEYBOARD: every menu works from the keyboard ----------------
+let kbMode=false;const kb={screen:'',btn:0,gi:0};
+window.addEventListener('pointerdown',()=>{kbMode=false;document.querySelectorAll('.kbf').forEach(e=>e.classList.remove('kbf'))},true);
+function kbScreen(){const h=$('#sheet h3');return h?h.textContent.split(/[ ·0-9]/)[0]:''}
+function kbFocusables(){return [...$('#sheet').querySelectorAll('button:not(:disabled), select, input, .row')]}
+function kbAfterRender(){
+  if($('#modal').hidden)return;const sc=kbScreen();if(sc!==kb.screen){kb.screen=sc;kb.btn=0;kb.gi=0}
+  if(!kbMode)return;
+  const sheet=$('#sheet');
+  if(sheet.querySelector('.selrow')||sheet.querySelector('.aimgrid')){markKb();return}
+  const f=kbFocusables();if(f.length){const el=f[clamp(kb.gi,0,f.length-1)];el.focus({preventScroll:false});el.scrollIntoView({block:'nearest'})}
+}
+function kbButtons(){return [...$('#sheet').querySelectorAll('.btns button:not(:disabled)')]}
+function markKb(){document.querySelectorAll('.kbf').forEach(e=>e.classList.remove('kbf'));if(!kbMode)return;const b=kbButtons();if(!b.length)return;kb.btn=clamp(kb.btn,0,b.length-1);b[kb.btn].classList.add('kbf');
+  const sel=$('#sheet .row.sel');if(sel)sel.scrollIntoView({block:'nearest'})}
+function keyDir(e){const key=e.key.length===1?e.key.toLowerCase():e.key;return KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):'']}
+function modalKey(e){
+  const sheet=$('#sheet'),k=e.key,ae=document.activeElement,typing=ae&&ae.tagName==='INPUT'&&ae.type!=='range';
+  if(k==='Escape'){e.preventDefault();if(G.over)return;const b=sheet.querySelector('[data-op="back"]')||sheet.querySelector('#pc')||sheet.querySelector('[data-op="close"]');if(b)b.click();else closeModal();return}
+  // aim screen: direction keys turn you, Enter throws, 1-9 picks a target
+  if(sheet.querySelector('.aimgrid')){
+    if(/^[1-9]$/.test(k)&&!e.code.startsWith('Numpad')){const q=sheet.querySelector(`[data-op="q${+k-1}"]`);if(q){e.preventDefault();q.click()}return}
+    const d=keyDir(e);if(d&&(d[0]||d[1])){e.preventDefault();const b=sheet.querySelector(`[data-op="d${(d[1]+1)*3+d[0]+1}"]`);if(b)b.click();return}
+    if(k==='Enter'||(d&&!d[0]&&!d[1])){e.preventDefault();sheet.querySelector('[data-op="fire"]').click()}return}
+  // letter hotkeys on buttons
+  if(k.length===1&&!typing&&!e.ctrlKey&&!e.metaKey){const hk=sheet.querySelector(`button[data-key="${k.toLowerCase()}"]:not(:disabled)`);if(hk){e.preventDefault();hk.click();return}}
+  // lists with a selection (pack, bags): up/down select, left/right pick a button, Enter does it
+  const rows=[...sheet.querySelectorAll('.selrow')];
+  if(rows.length){
+    const cur=Math.max(0,rows.findIndex(r=>r.classList.contains('sel')));
+    if(k==='ArrowUp'||k==='ArrowDown'||k==='k'||k==='j'||k==='8'||k==='2'){e.preventDefault();const up=k==='ArrowUp'||k==='k'||k==='8';rows[(cur+(up?-1:1)+rows.length)%rows.length].click();return}
+    const b=kbButtons();
+    if(k==='ArrowLeft'||k==='ArrowRight'||k==='h'||k==='l'||k==='Tab'){e.preventDefault();const back=k==='ArrowLeft'||k==='h'||(k==='Tab'&&e.shiftKey);kb.btn=(kb.btn+(back?-1:1)+b.length)%b.length;markKb();return}
+    if(k==='Enter'||k===' '){e.preventDefault();if(b.length)b[clamp(kb.btn,0,b.length-1)].click()}return}
+  // everything else: a vertical list of controls
+  const f=kbFocusables();if(!f.length)return;let i=f.indexOf(ae);
+  if(ae&&ae.type==='range'&&(k==='ArrowLeft'||k==='ArrowRight'))return;      // the slider moves natively
+  if(ae&&ae.tagName==='SELECT'&&(k==='ArrowLeft'||k==='ArrowRight')){e.preventDefault();ae.selectedIndex=(ae.selectedIndex+(k==='ArrowRight'?1:-1)+ae.options.length)%ae.options.length;ae.dispatchEvent(new Event('input'));return}
+  if(typing&&!['ArrowUp','ArrowDown','Enter','Tab'].includes(k))return;
+  const next=['ArrowDown','ArrowRight','j','l','2','6'].includes(k)||(k==='Tab'&&!e.shiftKey),prev=['ArrowUp','ArrowLeft','k','h','8','4'].includes(k)||(k==='Tab'&&e.shiftKey);
+  if(next||prev){e.preventDefault();i=i<0?(next?0:f.length-1):(i+(next?1:-1)+f.length)%f.length;kb.gi=i;f[i].focus();f[i].scrollIntoView({block:'nearest'});return}
+  if(k==='Enter'||k===' '){e.preventDefault();if(i<0){kb.gi=0;f[0].focus();return}if(ae.tagName==='BUTTON'||ae.classList.contains('row')){kb.gi=i;ae.click()}else if(typing){const go=sheet.querySelector('#rs');if(go)go.click()}}
+}
+function openHelp(){
+  const L=[['Move / attack','arrows · numpad · h j k l y u b n'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
+    ['Items (pack)','I — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · S split · M combine · C cook · A cook all · B build fire'],
+    ['Aim a throw','direction keys turn, 1–9 picks a visible enemy, Enter throws, Esc back'],['Look','V — move the cursor, . cycles targets, F faces the target'],
+    ['Explore','O'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
+    ['Sandbox','X toggle · M brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
+  openModal(`<h3>KEYBOARD</h3>`+L.map(([a,b])=>`<div class="prm" style="grid-template-columns:150px 1fr"><b style="color:#fff">${a}</b><span style="text-align:left;color:#9aa6b6">${b}</span></div>`).join('')+`<div class="btns"><button data-op="close">CLOSE</button></div>`);
+  bindOps({close:closeModal})}
+function paintFacing(){if(!SB)return;const p=G.player,x=p.x+p.face[0],y=p.y+p.face[1],single=/^(m:|i:|npc)/.test(SB.brush),rad=single?0:SB.size-1,st={cells:new Set()};
+  for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++)if(Math.hypot(dx,dy)<=rad+0.5)applyBrush(x+dx,y+dy,st);computeView();updateHUD()}
+
 // ---------------- controls ----------------
 function setActs(){
   const a=$('#acts');
@@ -1543,7 +1635,7 @@ function doAction(a){
     case 'run':toggleRun();break;
   }
 }
-$('#acts').addEventListener('click',e=>{const b=e.target.closest('button');if(b)doAction(b.dataset.a)});
+$('#acts').addEventListener('click',e=>{const b=e.target.closest('button');if(b){b.blur();doAction(b.dataset.a)}});
 let rep=null;
 function threat(m){const p=G.player;return G.vis[idx(m.x,m.y)]&&cheb(m.x,m.y,p.x,p.y)<=10&&los(p.x,p.y,m.x,m.y)}
 function anyMonsterVisible(){return !G.sandbox&&G.ents.some(threat)}
@@ -1557,8 +1649,13 @@ document.querySelectorAll('#dpad button').forEach(b=>{
 const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],k:[0,-1],j:[0,1],h:[-1,0],l:[1,0],y:[-1,-1],u:[1,-1],b:[-1,1],n:[1,1],
   '8':[0,-1],'2':[0,1],'4':[-1,0],'6':[1,0],'7':[-1,-1],'9':[1,-1],'1':[-1,1],'3':[1,1],'5':[0,0],'.':[0,0],' ':[0,0]};
 window.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){if(modalOpen()&&!G.over)closeModal();setFace(false);exitLook();stopExplore();return}
-  if(modalOpen()||e.target.tagName==='INPUT')return;
+  kbMode=true;
+  if(modalOpen()){modalKey(e);return}
+  if(e.key==='Escape'){setFace(false);exitLook();stopExplore();return}
+  if(e.target.tagName==='INPUT')return;
+  if(e.key==='?'){e.preventDefault();openHelp();return}
+  if(SB&&e.key==='g'){e.preventDefault();paintFacing();return}
+  if(SB&&e.key===','){e.preventDefault();openSbMenu();return}
   const key=e.key.length===1?e.key.toLowerCase():e.key;
   const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
   if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])&&!lookMode){G.player.face=[d[0],d[1]];updateHUD();return}dirInput(d[0],d[1]);return}
@@ -1566,7 +1663,7 @@ window.addEventListener('keydown',e=>{
   if(key==='f'){doAction('face');return}
   stopExplore();if(lookMode)exitLook();
   if(e.key==='Tab'){e.preventDefault();mmBig=!mmBig;return}
-  if(key==='i'){e.preventDefault();openInv()}else if(key==='f')doAction('face');else if(key==='>'||key==='Enter')descend();else if(key==='p')openParams();
+  if(key==='i'){e.preventDefault();openInv()}else if(key==='f')doAction('face');else if(key==='>'||key==='Enter'){e.preventDefault();descend()}else if(key==='p')openParams();
   else if(key==='x')SB?exitSandbox():enterSandbox();else if(key==='r'&&SB)toggleRun();else if(key==='m'&&SB)openBrush();
 });
 window.addEventListener('resize',resize);

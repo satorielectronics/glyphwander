@@ -24,6 +24,10 @@ canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
 button{font:inherit;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:9px;touch-action:none}
 button:active{background:#1a2432}
 button:disabled{opacity:.35}
+.kh{display:none}
+@media (hover:hover) and (pointer:fine){.kh{display:inline-block;margin-right:6px;padding:0 4px;border:1px solid #3a4658;border-radius:4px;font-size:10px;line-height:14px;color:#8a96a8;vertical-align:1px}}
+.kbf,.sheet button:focus-visible,.sheet select:focus-visible,.sheet input:focus-visible,.sheet .row:focus{outline:2px solid #ff8a3d;outline-offset:1px}
+.sheet .row:focus{background:#141c27}
 .btns.col{flex-direction:column}
 .btns.col button{flex:none;height:44px}
 canvas{touch-action:none}

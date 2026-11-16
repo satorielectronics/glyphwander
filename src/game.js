@@ -27,7 +27,7 @@ const P={
   regrow:0.015, grassGrowth:0.004, vineGrowth:0.01, fireflies:0.12,
   conduct:150, meatRot:150,
   monsterDensity:1, campEvery:90, hungerRate:10, lightRadius:5, nightChance:0.35,
-  zoom:15, showHeat:'Off',
+  zoom:15, showHeat:'Off', showCones:'On', darkRooms:0.35,
 };
 const WIND={Calm:[0,0],N:[0,-1],NE:[.707,-.707],E:[1,0],SE:[.707,.707],S:[0,1],SW:[-.707,.707],W:[-1,0],NW:[-.707,-.707]};
 const PARAM_DEFS=[
@@ -42,6 +42,9 @@ const PARAM_DEFS=[
   {k:'ignitePoint',label:'Auto-ignite at',min:0.4,max:1,step:0.02},
   {k:'meltPoint',label:'Ice melts at',min:0.3,max:0.9,step:0.02},
   {k:'showHeat',label:'Heat overlay',select:['Off','On']},
+  {h:'LIGHT & STEALTH'},
+  {k:'darkRooms',label:'Dark rooms',min:0,max:1,step:0.05},
+  {k:'showCones',label:'Vision cones',select:['On','Off']},
   {h:'AIR'},
   {k:'windDir',label:'Wind',select:Object.keys(WIND)},
   {k:'windStrength',label:'Wind bias',min:0,max:1,step:0.05},
@@ -145,8 +148,8 @@ function itemName(it){
   return ITEMS[it.kind].name+(it.charges!=null?` [${it.charges}]`:'')+(it.frozen?' (frozen)':'')}
 function atkOf(e){return e.isPlayer&&e.weapon?e.atk+WEAPONS[e.weapon.w].atk+e.weapon.plus:e.atk}
 function mkMonster(kind,x,y){const d=MON[kind],dp=G.depth-1,hp=d.hp+Math.floor(dp*1.2);
-  return Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,
-    dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid})}
+  return Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,
+    dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid,face:null})}
 
 // ---------------- run / floor setup ----------------
 function newRun(seed){
@@ -197,7 +200,7 @@ function genFloor(){
     const x0=gx*sw,y0=gy*sh+1,real=R()<0.8||gx===gy;let rx,ry,rw,rh;
     if(real){rw=4+Math.floor(R()*(sw-7));rh=3+Math.floor(R()*(sh-5));rx=x0+1+Math.floor(R()*(sw-rw-2));ry=y0+1+Math.floor(R()*(sh-rh-2))}
     else{rw=1;rh=1;rx=x0+3+Math.floor(R()*(sw-6));ry=y0+2+Math.floor(R()*(sh-4))}
-    rooms.push({x:rx,y:ry,w:rw,h:rh,gx,gy,real});
+    rooms.push({x:rx,y:ry,w:rw,h:rh,gx,gy,real,lit:R()>=P.darkRooms});
   }
   rooms.forEach((r,k)=>{for(let y=r.y;y<r.y+r.h;y++)for(let x=r.x;x<r.x+r.w;x++){G.tile[idx(x,y)]=T_FLOOR;if(r.real)G.roomIdx[idx(x,y)]=k}});
   const conns=[],vis=new Set([0]),has=new Set();
@@ -295,27 +298,64 @@ function los(x0,y0,x1,y1){let dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:
 function nearestFire(x,y,r){let best=null,bd=99;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny)||(G.tile[idx(nx,ny)]!==T_FIRE&&G.tile[idx(nx,ny)]!==T_CAMP))continue;const d=Math.hypot(dx,dy);if(d<bd){bd=d;best=[nx,ny]}}return best}
 
 // ---------------- view / light ----------------
+// Environment light: everything except the player's own torch. Walls and thick smoke cast shadows.
+function computeLight(){
+  const N=W*H,L=new Float32Array(N);
+  if(G.lit)L.fill(0.7);
+  if(!G.night)for(const r of G.rooms){if(!r.real||!r.lit)continue;for(let y=r.y-1;y<=r.y+r.h;y++)for(let x=r.x-1;x<=r.x+r.w;x++){if(!inb(x,y))continue;const j=idx(x,y);
+    const edge=(x<r.x||y<r.y||x>=r.x+r.w||y>=r.y+r.h)?0.45:0.55;if(L[j]<edge)L[j]=edge}}
+  const add=(fx,fy,str,rad)=>{const R=Math.ceil(rad);for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const x=fx+dx,y=fy+dy;if(!inb(x,y))continue;const d=Math.hypot(dx,dy);if(d>rad)continue;
+    const j=idx(x,y),v=str*(1-d/(rad+0.4));if(v<=L[j])continue;if((dx||dy)&&!los(fx,fy,x,y))continue;L[j]=v}};
+  for(let i=0;i<N;i++){const t=G.tile[i];if(t===T_CAMP)add(i%W,(i/W)|0,1,4.6);else if(t===T_FIRE)add(i%W,(i/W)|0,1,3.6);else if(G.elec[i])add(i%W,(i/W)|0,0.7,3);else if(t===T_SLICK&&G.stored[i])add(i%W,(i/W)|0,0.35,1.5)}
+  for(const f of G.flies)add(f.x,f.y,0.65,2.5);
+  if(G.strikeAt&&G.strikeAt.turn===G.turn)add(G.strikeAt.x,G.strikeAt.y,1,7);
+  G.env=L;
+}
+function torchRadius(){return G.torch===false?0:G.night?Math.max(1.5,P.lightRadius-3):P.lightRadius}
+// how lit the player is, as seen by others (0 = pitch dark)
+function playerLightLevel(){const p=G.player;return Math.min(1.2,(G.env?G.env[idx(p.x,p.y)]:0.5)+(torchRadius()?0.7:0))}
 function computeView(){
-  if(G.sandbox){G.vis.fill(1);G.seen.fill(1);G.light.fill(0.85);buildMinimap();return}
-  const p=G.player,N=W*H;G.vis.fill(0);G.light.fill(0);
-  const fl=new Float32Array(N);
-  const addLight=(fx,fy,s,r)=>{const R=Math.ceil(r);for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const x=fx+dx,y=fy+dy;if(!inb(x,y))continue;const d=Math.hypot(dx,dy);if(d>r)continue;const j=idx(x,y);fl[j]=Math.max(fl[j],s*(1-d/(r+0.4)))}};
-  for(let i=0;i<N;i++){if(G.tile[i]===T_CAMP)addLight(i%W,(i/W)|0,1,4.6);else if(G.tile[i]===T_FIRE)addLight(i%W,(i/W)|0,1,3.6);else if(G.elec[i])addLight(i%W,(i/W)|0,0.7,3)}
-  for(const f of G.flies)addLight(f.x,f.y,0.65,2.5);
-  if(G.lit){for(let i=0;i<N;i++){G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(0.6,fl[i])}buildMinimap();return}
-  const ri=G.roomIdx[idx(p.x,p.y)],room=ri>=0&&!G.night?G.rooms[ri]:null,VR=13;
-  const torch=G.night?Math.max(1.5,P.lightRadius-3):P.lightRadius;
+  computeLight();
+  const p=G.player,N=W*H,tr=torchRadius();
+  if(G.sandbox){G.vis.fill(1);G.seen.fill(1);for(let i=0;i<N;i++){const d=Math.hypot(i%W-p.x,((i/W)|0)-p.y);G.light[i]=Math.max(0.28,G.env[i],tr?1-d/(tr+0.5):0)}computeCones();buildMinimap();return}
+  G.vis.fill(0);G.light.fill(0);
+  if(G.lit){for(let i=0;i<N;i++){G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(0.6,G.env[i])}computeCones();buildMinimap();return}
+  const VR=14;
   for(let y=p.y-VR;y<=p.y+VR;y++)for(let x=p.x-VR;x<=p.x+VR;x++){
     if(!inb(x,y))continue;const i=idx(x,y),d=Math.hypot(x-p.x,y-p.y);
-    let L=Math.max(0,1-d/(torch+0.5));
-    if(room&&x>=room.x-1&&x<=room.x+room.w&&y>=room.y-1&&y<=room.y+room.h)L=Math.max(L,0.5);
-    L=Math.max(L,fl[i]);
-    if(L<=0.02&&d>1.5)continue;
+    let L=Math.max(G.env[i],tr?Math.max(0,1-d/(tr+0.5)):0);
+    if(d<=(tr?1.5:2.5))L=Math.max(L,tr?0.22:0.16);   // you can always make out what's close; eyes adjust without a torch
+    if(L<=0.04)continue;
     if(!los(p.x,p.y,x,y))continue;
     L*=1-Math.min(0.6,(G.gas[i]+G.pois[i])*0.6);
     G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(L,0.08);
   }
-  buildMinimap();
+  // silhouettes: creatures in line of sight within 8 tiles can be made out even in darkness
+  for(const m of G.ents){m.silhouette=false;const i=idx(m.x,m.y);if(G.vis[i]||cheb(m.x,m.y,p.x,p.y)>8||!los(p.x,p.y,m.x,m.y))continue;G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(G.light[i],0.1);m.silhouette=true}
+  computeCones();buildMinimap();
+}
+// ---------------- perception ----------------
+function facingDot(m,x,y){const [fx,fy]=m.face,vx=x-m.x,vy=y-m.y,l=Math.hypot(vx,vy);if(!l)return 1;return (fx*vx+fy*vy)/(Math.hypot(fx,fy)*l)}
+function detects(m){
+  const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(d>9||!los(m.x,m.y,p.x,p.y))return false;
+  const dot=facingDot(m,p.x,p.y);
+  if(d<=1&&dot>-0.35)return true;
+  const cone=dot>=0.35?1:dot>=-0.35?0.35:0.1;
+  let chance=clamp((playerLightLevel()*1.3-(d-1)*0.07+(m.alert>0?0.35:0))*cone,0,1);
+  if(dot>=0.35&&d<=2)chance=Math.max(chance,0.3);  // close and in front: it can sense you even in the dark
+  return h01(P.seed,G.turn,m.id,60)<chance;
+}
+function faceToward(m,x,y){const dx=sgn(x-m.x),dy=sgn(y-m.y);if(dx||dy)m.face=[dx,dy]}
+function noise(x,y,r,why){
+  for(const m of G.ents){if(m.dead||m.alert>0||cheb(m.x,m.y,x,y)>r)continue;
+    faceToward(m,x,y);m.sus=4;m.tx=x;m.ty=y;if(seenBy(m.x,m.y))fxGlyph(m.x,m.y,'?','#ffe24a',0,500)}
+}
+function computeCones(){
+  const N=W*H;if(!G.cone||G.cone.length!==N)G.cone=new Uint8Array(N);G.cone.fill(0);
+  if(P.showCones!=='On')return;
+  for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;const v=m.alert>0?2:1;
+    for(let dy=-5;dy<=5;dy++)for(let dx=-5;dx<=5;dx++){if(!dx&&!dy)continue;const x=m.x+dx,y=m.y+dy;if(!inb(x,y)||Math.hypot(dx,dy)>5.3)continue;const i=idx(x,y);
+      if(G.tile[i]===T_WALL||!G.seen[i]||facingDot(m,x,y)<0.38||!los(m.x,m.y,x,y))continue;G.cone[i]=Math.max(G.cone[i],v)}}
 }
 
 // ---------------- messages / fx ----------------
@@ -328,8 +368,15 @@ const seenBy=(x,y)=>inb(x,y)&&G.vis[idx(x,y)];
 function Name(e){return e.isPlayer?'You':'The '+e.name}
 function attack(a,b){
   const R=G.rng;
-  if(R()>(a.isPlayer?0.92:0.85)){if(a.isPlayer||seenBy(a.x,a.y))say(`${Name(a)} ${a.isPlayer?'miss':'misses'}.`,'dim');fxText(b.x,b.y,'miss','#6b7787');return}
-  let dmg=Math.max(1,atkOf(a)+Math.floor(R()*3)-b.def);
+  let mult=1;
+  if(a.isPlayer&&!b.isPlayer&&!b.npc){if(!b.face)b.face=DIRS8[b.dir||0];
+    const behind=facingDot(b,a.x,a.y)<-0.35,unaware=!(b.alert>0);
+    mult=behind&&unaware?3:behind||unaware?2:1;
+    b.alert=8;b.sus=0;b.tx=a.x;b.ty=a.y;
+    noise(a.x,a.y,4)}
+  if(mult===1&&R()>(a.isPlayer?0.92:0.85)){if(a.isPlayer||seenBy(a.x,a.y))say(`${Name(a)} ${a.isPlayer?'miss':'misses'}.`,'dim');fxText(b.x,b.y,'miss','#6b7787');return}
+  let dmg=Math.max(1,atkOf(a)+Math.floor(R()*3)-b.def)*mult;
+  if(mult>1){say(mult===3?`CRITICAL! You strike the unsuspecting ${b.name} from behind! ×3`:`Sneak attack on the ${b.name}! ×2`,'good');fxText(b.x,b.y-0.4,mult===3?'CRIT ×3':'×2','#ffd84a')}
   if(!a.isPlayer&&a.steal&&!a.carry&&G.player.inv.length){
     const k=Math.floor(R()*G.player.inv.length);a.carry=G.player.inv.splice(k,1)[0];a.fleeing=true;if(a.carry===G.player.weapon)G.player.weapon=null;
     say(`The thief snatches your ${itemName(a.carry)} and bolts!`,'bad');return}
@@ -339,6 +386,7 @@ function attack(a,b){
   if(seals.includes('bolt'))dmg+=2;
   hurt(b,dmg,a.isPlayer?'you':'monster');
   if(seals.length)sealHit(b,bx,by,seals);
+  if(!b.dead&&!b.isPlayer&&a.isPlayer)faceToward(b,a.x,a.y);
 }
 function sealHit(b,x,y,seals){
   const i=idx(x,y);
@@ -515,6 +563,7 @@ function flash(seeds){
 }
 function poisonCloud(x,y,r,amt){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny)||Math.hypot(dx,dy)>r+0.3)continue;const i=idx(nx,ny);if(G.tile[i]===T_WALL)continue;G.pois[i]=Math.min(1,G.pois[i]+amt*(1-Math.hypot(dx,dy)/(r+1.5)))}}
 function explode(x,y,msg){
+  noise(x,y,6);
   if(seenBy(x,y))say(msg,'fire');
   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const i=idx(nx,ny),t=G.tile[i];
     if(t===T_WALL||t===T_STAIRS)continue;
@@ -554,7 +603,7 @@ function stormStep(){
   if(st.turns<=0){G.storm=null;say('The storm clouds break apart.','dim')}
 }
 function strike(x,y){
-  const i=idx(x,y);G.flashT=performance.now();
+  const i=idx(x,y);G.flashT=performance.now();G.strikeAt={x,y,turn:G.turn};noise(x,y,6);
   for(let k=1;k<=5;k++)if(inb(x,y-k))fxGlyph(x,y-k,k%2?'/':'\\','#f4f8ff',0,160);
   fxGlyph(x,y,'ϟ','#ffffff',0,420);
   G.heat[i]=1;
@@ -590,8 +639,10 @@ function envDamage(){
 }
 
 // ---------------- movement helpers ----------------
+const NOISY={[T_WATER]:'splash',[T_GRATE]:'clang',[T_ICE]:'crack',[T_SNOW]:'crunch',[T_SLICK]:'crack'};
 function onEnter(e,dx,dy){
   const i=idx(e.x,e.y),t=G.tile[i];
+  if(e.isPlayer&&NOISY[t]){noise(e.x,e.y,3);fxText(e.x,e.y,NOISY[t]+'!','#8a96a8')}
   if(t===T_SNOW)G.prints[i]=60;
   if(t===T_MUD){e.stuck=1;if(e.isPlayer)say('You sink into the mud.','dim')}
   if(e.frost&&t!==T_STAIRS){frostCell(i)}
@@ -630,7 +681,7 @@ function safeFor(m,nx,ny,desperate){const i=idx(nx,ny),t=G.tile[i];
   if(t===T_GRATE&&G.heat[i]>0.6&&!m.fireImmune)return false;
   return true}
 function freeStep(m,ex,ey,desperate){const nx=m.x+ex,ny=m.y+ey;return walkable(nx,ny)&&!occupant(nx,ny)&&canDiag(m.x,m.y,ex,ey)&&safeFor(m,nx,ny,desperate)}
-function moveMonster(m,nx,ny){const oi=idx(m.x,m.y),dx=nx-m.x,dy=ny-m.y;m.x=nx;m.y=ny;
+function moveMonster(m,nx,ny){const oi=idx(m.x,m.y),dx=nx-m.x,dy=ny-m.y;m.x=nx;m.y=ny;if(dx||dy)m.face=[sgn(dx),sgn(dy)];
   if(m.trail){const t=G.tile[oi];if(t===T_GRASS||t===T_OIL||t===T_VINE)ignite(oi)}
   onEnter(m,dx,dy)}
 function stepToward(m,tx,ty){let best=null,bs=stepScore(m.x,m.y,tx,ty);
@@ -655,19 +706,23 @@ function monsterAct(m){
     if(best)moveMonster(m,...best);return}
   if(m.panicky){const fire=nearestFire(m.x,m.y,2);if(fire||G.heat[i]>0.5){if(!m.panic&&seenBy(m.x,m.y))say('The ogre panics at the flames!','warn');m.panic=3;m.fireSrc=fire||m.fireSrc||[m.x,m.y]}}
   if(m.panic>0){m.panic--;panicMove(m,m.fireSrc);return}
-  if(m.puffer){m.puffCD--;if(m.puffCD<=0&&d<=5&&los(m.x,m.y,p.x,p.y)){poisonCloud(m.x,m.y,1,0.9);m.puffCD=5;if(seenBy(m.x,m.y))say('The bog toad belches a cloud of poison.','warn');return}}
+  const spotted=detects(m);
+  if(spotted&&(m.ai==='hunt'||d<=(m.ai==='graze'?2:4))){
+    if(!m.alert){if(seenBy(m.x,m.y)){say(`The ${m.name} spots you!`,'warn');fxGlyph(m.x,m.y,'!','#ff5a4a',0,600)}}
+    m.alert=8;m.sus=0;m.tx=p.x;m.ty=p.y;faceToward(m,p.x,p.y)}
+  if(m.puffer){m.puffCD--;if(m.puffCD<=0&&d<=5&&m.alert>0&&los(m.x,m.y,p.x,p.y)){poisonCloud(m.x,m.y,1,0.9);m.puffCD=5;if(seenBy(m.x,m.y))say('The bog toad belches a cloud of poison.','warn');return}}
   const dx=sgn(p.x-m.x),dy=sgn(p.y-m.y);
-  if(d===1&&canDiag(m.x,m.y,dx,dy)){attack(m,p);return}
+  if(d===1&&canDiag(m.x,m.y,dx,dy)&&(m.alert>0||spotted)){faceToward(m,p.x,p.y);attack(m,p);return}
   if(m.ai==='graze'){
     if(G.tile[i]===T_GRASS&&h01(P.seed,G.turn,m.id,20)<0.6){G.tile[i]=T_DIRT;return}
     for(const [ex,ey] of DIRS4){const nx=m.x+ex,ny=m.y+ey;if(inb(nx,ny)&&G.tile[idx(nx,ny)]===T_VINE){G.tile[idx(nx,ny)]=T_DIRT;if(seenBy(nx,ny))say('A moss beetle chews through the vines.','dim');return}}
     let best=null,bd=99;for(let yy=-5;yy<=5;yy++)for(let xx=-5;xx<=5;xx++){const nx=m.x+xx,ny=m.y+yy;if(!inb(nx,ny)||G.tile[idx(nx,ny)]!==T_GRASS||occupant(nx,ny))continue;const dd=Math.abs(xx)+Math.abs(yy)+h01(m.id,nx,ny,2)*0.5;if(dd<bd){bd=dd;best=[nx,ny]}}
     if(best&&stepToward(m,...best))return;
   }
-  const sees=d<=9&&los(m.x,m.y,p.x,p.y);
-  if(sees&&(m.ai==='hunt'||d<=(m.ai==='graze'?2:4))){m.tx=p.x;m.ty=p.y}
   if(m.tx==null&&m.trail&&G.flies.length){let best=null,bd=9;for(const f of G.flies){const dd=cheb(m.x,m.y,f.x,f.y);if(dd<bd){bd=dd;best=f}}if(best){m.tx=best.x;m.ty=best.y}}
-  if(m.tx!=null){const ok=stepToward(m,m.tx,m.ty);if(!ok||(m.x===m.tx&&m.y===m.ty)){m.tx=null;m.ty=null}return}
+  if(m.tx!=null){const ok=stepToward(m,m.tx,m.ty);if(!ok||(m.x===m.tx&&m.y===m.ty)){m.tx=null;m.ty=null;if(m.sus&&!m.alert){m.face=DIRS8[(DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1])+4)%8]}}return}
+  // unaware: sometimes pause and look around (sentries turn 45°)
+  if(h01(P.seed,G.turn,m.id,61)<0.3){const k=DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1]);m.face=DIRS8[(k+(h01(P.seed,G.turn,m.id,62)<0.5?1:7))%8];return}
   for(let k=0;k<8;k++){
     const [ex,ey]=DIRS8[m.dir];
     if(freeStep(m,ex,ey)&&G.rng()<0.85){moveMonster(m,m.x+ex,m.y+ey);return}
@@ -679,6 +734,8 @@ function monstersAct(){
     if(m.dead||G.over)continue;
     const i=idx(m.x,m.y);
     if(m.split&&G.tile[i]===T_WATER){m.hp=Math.min(m.maxhp+6,m.hp+2);if(m.hp>=m.maxhp+4){trySplit(m)}}
+    if(!m.face)m.face=DIRS8[m.dir];
+    if(m.alert>0)m.alert--;if(m.sus>0)m.sus--;
     if(m.frozen>0){m.frozen--;continue}
     if(m.stuck>0){m.stuck--;continue}
     if(m.slow&&!m.panic&&G.turn%2)continue;
@@ -807,6 +864,7 @@ function throwIt(it){
   path.forEach(([x,y],n)=>fxGlyph(x,y,d.ch,d.color,n*30,90));
   const [lx,ly]=path.length?path[path.length-1]:[p.x,p.y];
   say(`You throw the ${d.name}.`);
+  noise(lx,ly,3);
   if(it.kind==='oilJar'){
     if(G.tile[idx(lx,ly)]===T_FIRE){explode(lx,ly,'The jar bursts into a fireball!');return}
     say('Oil splashes everywhere.','dim');
@@ -995,6 +1053,7 @@ function render(now){
     if(t===T_WALL&&(oT||oB||oL||oR)){cx.strokeStyle=v?`rgba(150,190,230,${(0.35+0.45*L).toFixed(2)})`:'rgba(110,130,160,0.32)';cx.lineWidth=Math.max(1,TS/18);cx.beginPath();
       if(oT){cx.moveTo(px,py+0.5);cx.lineTo(px+TS,py+0.5)}if(oB){cx.moveTo(px,py+TS-0.5);cx.lineTo(px+TS,py+TS-0.5)}
       if(oL){cx.moveTo(px+0.5,py);cx.lineTo(px+0.5,py+TS)}if(oR){cx.moveTo(px+TS-0.5,py);cx.lineTo(px+TS-0.5,py+TS)}cx.stroke()}
+    if(G.cone&&G.cone[i]&&t!==T_WALL){cx.fillStyle=G.cone[i]===2?'rgba(255,80,60,0.10)':'rgba(255,214,120,0.08)';cx.fillRect(px,py,TS,TS)}
     if(heatOn&&v&&t!==T_WALL){const h=G.heat[i];cx.fillStyle=h>0.3?`rgba(255,${Math.round(200-h*180)},40,${((h-0.3)*0.7).toFixed(2)})`:`rgba(80,160,255,${((0.3-h)*0.9).toFixed(2)})`;cx.fillRect(px,py,TS,TS)}
   }
   const big=(ch,x,y,color,scale,glow)=>{const px=ox+x*TS,py=oy+y*TS;
@@ -1008,10 +1067,15 @@ function render(now){
       if(hit){cx.strokeStyle=`rgba(255,90,74,${pulse.toFixed(2)})`;cx.lineWidth=Math.max(1.5,TS/12);cx.strokeRect(px+2,py+2,TS-4,TS-4)}
       else{cx.fillStyle=`rgba(255,170,90,${pulse.toFixed(2)})`;cx.fillText('×',px+TS/2,py+TS/2)}}}
   for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;
-    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.color,0.88,TS*0.45);
+    if(m.silhouette)cx.globalAlpha=0.55;
+    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.color,0.88,m.silhouette?0:TS*0.45);
+    cx.globalAlpha=1;
     const px=ox+m.x*TS,py=oy+m.y*TS;
     if(m.frozen){cx.strokeStyle='#9fe8ff88';cx.strokeRect(px+TS*0.12,py+TS*0.08,TS*0.76,TS*0.84)}
     if(m.panic){cx.font=`700 ${(TS*0.32).toFixed(1)}px ${FONT}`;cx.fillStyle='#ffe24a';cx.fillText('!',px+TS*0.85,py+TS*0.18)}
+    if(m.face){const [fx,fy]=m.face,col=m.alert>0?'#ff5a4a':m.sus>0?'#ffe24a':'#aab4c2';
+      cx.font=`700 ${(TS*0.36).toFixed(1)}px ${FONT}`;cx.fillStyle=col;cx.fillText(ARROWS[fx+','+fy],px+TS*(0.5+fx*0.44),py+TS*(0.5+fy*0.44));
+      cx.font=`700 ${(TS*0.3).toFixed(1)}px ${FONT}`;if(m.alert>0){cx.fillStyle='#ff5a4a';cx.fillText('!',px+TS*0.15,py+TS*0.16)}else if(m.sus>0){cx.fillStyle='#ffe24a';cx.fillText('?',px+TS*0.15,py+TS*0.16)}else{cx.fillStyle='#6b7787';cx.fillText('z',px+TS*0.15,py+TS*0.16)}}
     if(m.hp<m.maxhp){cx.fillStyle='#2a0d0d';cx.fillRect(px+TS*0.15,py+TS*0.9,TS*0.7,TS*0.07);cx.fillStyle='#ff6a5a';cx.fillRect(px+TS*0.15,py+TS*0.9,TS*0.7*clamp(m.hp/m.maxhp,0,1),TS*0.07)}
     if(m.carry){cx.font=`700 ${(TS*0.32).toFixed(1)}px ${FONT}`;cx.fillStyle=ITEMS[m.carry.kind].color;cx.fillText(ITEMS[m.carry.kind].ch,px+TS*0.85,py+TS*0.18)}
   }
@@ -1083,10 +1147,12 @@ function loop(now){render(now);requestAnimationFrame(loop)}
 // ============================================================
 const $=s=>document.querySelector(s);
 function stateHash(){let h=2166136261;const mix=v=>{h^=v;h=Math.imul(h,16777619)};for(let i=0;i<G.tile.length;i++){mix(G.tile[i]);mix(Math.round(G.heat[i]*255))}for(const m of G.ents){mix(m.x);mix(m.y);mix(m.hp)}const p=G.player;mix(p.x);mix(p.y);mix(p.hp);return(h>>>0).toString(16).padStart(8,'0')}
+function stealthTag(){const l=playerLightLevel(),pct=Math.round(Math.min(1,l)*100),[lab,col]=l<0.15?['HIDDEN','#9be070']:l<0.45?['shadowed','#f0c060']:['visible','#ff7a6a'];
+  return `<span style="color:${col}">${G.torch===false?'◌':'◉'} ${lab} ${pct}%</span>`}
 function updateHUD(){
   const p=G.player,i=idx(p.x,p.y),t=G.tile[i];
   if(SB){
-    $('#hud').innerHTML=`<span class="t">SANDBOX</span><span>T<b>${G.turn}</b></span><span>✎ <b>${brushLabel(SB.brush)}</b> ·${SB.size}</span>`+
+    $('#hud').innerHTML=`<span class="t">SANDBOX</span><span>T<b>${G.turn}</b></span><span>✎ <b>${brushLabel(SB.brush)}</b> ·${SB.size}</span>${stealthTag()}`+
       `<span>${SB.running?'<b style="color:#9be070">▶ running</b>':'❚❚ paused'}</span><span class="dim">AI ${SB.ai?'on':'off'} · god ${SB.god?'on':'off'} · ${TNAME[t]} · ${Math.round(G.heat[i]*100)}°</span>`;
     return}
   const hpPct=Math.max(0,p.hp/p.maxhp*100);
@@ -1094,7 +1160,7 @@ function updateHUD(){
   $('#hud').innerHTML=`<span class="t">GLYPHWANDER</span><span><b>B${G.depth}F</b>${G.night?' ☾':''}${G.lit?' ☀':''}${G.storm?` <span style="color:#8fb0ff">⛈${G.storm.turns}</span>`:''}</span><span>Lv<b>${p.lv}</b></span>`+
     `<span>HP <b>${p.hp}</b>/${p.maxhp}<span class="bar"><i style="width:${hpPct}%;background:${hpPct<30?'#ff6a5a':'#7fe07f'}"></i></span></span>`+
     `<span>Full <b style="color:${p.full<=20?'#f0c060':'#fff'}">${p.full}%</b></span>`+
-    `<span>⚔ <b>${p.weapon?itemName(p.weapon):'fists'}</b> <span class="dim">(${atkOf(p)})</span></span><span style="color:#ffd84a">$${p.gold}</span>`+
+    `${stealthTag()}<span>⚔ <b>${p.weapon?itemName(p.weapon):'fists'}</b> <span class="dim">(${atkOf(p)})</span></span><span style="color:#ffd84a">$${p.gold}</span>`+
     `<span class="dim">T${G.turn} · wind ${wa} · ${TNAME[t]} · ${Math.round(G.heat[i]*100)}°</span>`;
 }
 function renderLog(){const el=$('#log');if(!el)return;el.innerHTML=G.log.slice(-4).map((l,k,a)=>`<div class="${l.cls}" style="opacity:${0.45+0.55*(k+1)/a.length}">${l.msg}</div>`).join('')}
@@ -1279,7 +1345,7 @@ function enterSandbox(){
 function buildArena(){
   allocLayers();G.npc=null;G.flies=[];
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=idx(x,y);G.tile[i]=x===0||y===0||x===W-1||y===H-1?T_WALL:T_FLOOR;G.roomIdx[i]=0}
-  G.rooms=[{x:1,y:1,w:W-2,h:H-2,real:true}];G.stairRoom=0;
+  G.rooms=[{x:1,y:1,w:W-2,h:H-2,real:true,lit:false}];G.stairRoom=0;
 }
 function exitSandbox(){if(!SB)return;stopRun();closeModal();exitLook();G=SB.saved;SB=null;setActs();camX=G.player.x;camY=G.player.y;computeView();updateHUD();renderLog();resize()}
 function stopRun(){if(SB&&SB.timer){clearInterval(SB.timer);SB.timer=null}if(SB)SB.running=false}
@@ -1346,7 +1412,9 @@ MON.toad.desc='Belches clouds of poison gas. Immune to poison.';MON.thief.desc='
 MON.ogre.desc='Slow but brutal. Panics near fire and tramples anything in its way.';MON.wraith.desc='Freezes the ground it walks on. Immune to cold, takes double damage from fire.';
 function traits(m){const t=[];if(m.fireImmune)t.push('fire-immune');if(m.poisonImmune)t.push('poison-immune');if(m.coldImmune)t.push('cold-immune');if(m.slow)t.push('slow');
   if(m.frozen)t.push(`frozen ${m.frozen}t`);if(m.stuck)t.push('stuck in mud');if(m.panic)t.push('panicking');if(m.fleeing)t.push('fleeing');if(m.carry)t.push(`carrying your ${itemName(m.carry)}`);
-  if(m.tx!=null&&!m.fleeing)t.push('hunting');return t}
+  return t}
+function awareness(m){const f=m.face?ARROWS[m.face.join(',')]:'?';
+  return m.alert>0?`<span style="color:#ff6a5a">ALERTED — hunting you</span> · facing ${f}`:m.sus>0?`<span style="color:#ffe24a">suspicious — investigating a noise</span> · facing ${f}`:`<span style="color:#9be070">unaware</span> · facing ${f}`}
 function lookTargets(){const p=G.player,out=[];
   G.ents.filter(m=>G.vis[idx(m.x,m.y)]).sort((a,b)=>cheb(a.x,a.y,p.x,p.y)-cheb(b.x,b.y,p.x,p.y)).forEach(m=>out.push([m.x,m.y]));
   if(G.npc&&G.vis[idx(G.npc.x,G.npc.y)])out.push([G.npc.x,G.npc.y]);
@@ -1380,13 +1448,15 @@ function updateLook(){
   if(!G.vis[i]){card.innerHTML=head('·','#6b7787',`Remembered ${TNAME[t]}`)+`<div class="dim">${TDESC[t]} Out of sight — anything here may have changed.</div>`;return}
   const m=entAt(x,y);
   if(p.x===x&&p.y===y)h+=head('@','#fff',`You — HP ${p.hp}/${p.maxhp} · ATK ${atkOf(p)} · DEF ${p.def}`)+`<div>Wielding ${p.weapon?itemName(p.weapon):'nothing'}. ${p.stuck?'Stuck in mud. ':''}</div>`;
+  if(m&&m.silhouette)h+=`<div class="dim">A shape in the dark — it's standing in shadow.</div>`;
   if(m){const d=MON[m.kind];h+=head(m.ch,m.frozen?'#9fe8ff':m.color,`${m.name[0].toUpperCase()+m.name.slice(1)} — HP ${m.hp}/${m.maxhp} · ATK ${m.atk} · DEF ${m.def}`)+`<div>${d.desc||''}</div>`;
-    const tr=traits(m);if(tr.length)h+=`<div class="dim">${tr.join(' · ')}</div>`}
+    const tr=traits(m);h+=`<div>${awareness(m)}</div>`;if(tr.length)h+=`<div class="dim">${tr.join(' · ')}</div>`;
+    if(!m.alert){const behind=facingDot(m,p.x,p.y)<-0.35;h+=`<div class="dim">${behind?'You are behind it — a strike now is a ×3 critical.':'Strike while it is unaware for ×2; from behind for ×3.'}</div>`}}
   if(G.npc&&G.npc.x===x&&G.npc.y===y)h+=head('&','#ffb050','Blacksmith')+`<div>Hones weapons and stamps seals for gold. Walk into them to trade.</div>`;
   const its=G.floorItems.filter(f=>f.x===x&&f.y===y);
   for(const f of its.slice(0,2)){const d=ITEMS[f.it.kind];h+=head(d.ch,d.color,itemName(f.it))+`<div>${d.desc}${isBag(f.it)&&f.it.items.length?' Inside: '+f.it.items.map(itemName).join(', ')+'.':''}</div>`}
   if(its.length>2)h+=`<div class="dim">…and ${its.length-2} more item${its.length>3?'s':''}.</div>`;
-  const env=[`${Math.round(G.heat[i]*100)}°`];if(G.gas[i]>0.05)env.push(`smoke ${Math.round(G.gas[i]*100)}%`);if(G.pois[i]>0.05)env.push(`<span style="color:#c8f040">poison ${Math.round(G.pois[i]*100)}%</span>`);
+  const env=[`${Math.round(G.heat[i]*100)}°`,`light ${Math.round(Math.min(1,G.env?G.env[i]:0)*100)}%`];if(G.gas[i]>0.05)env.push(`smoke ${Math.round(G.gas[i]*100)}%`);if(G.pois[i]>0.05)env.push(`<span style="color:#c8f040">poison ${Math.round(G.pois[i]*100)}%</span>`);
   if(G.elec[i])env.push('<span style="color:#ffe24a">electrified</span>');if(G.stored[i])env.push('<span style="color:#ff8a3d">fire trapped inside</span>');if(G.prints[i])env.push('fresh footprints');if(t===T_CAMP)env.push(`<span style="color:#ffb050">${G.fuel[i]} turns of fuel</span>`);if(inStorm(x,y))env.push('<span style="color:#8fb0ff">in the storm</span>');
   if(G.flies.some(f=>f.x===x&&f.y===y))env.push('fireflies');
   h+=`<div class="dim" style="margin-top:4px">Ground: <b style="color:#cfd6e0">${TNAME[t]}</b> · ${env.join(' · ')} — ${TDESC[t]}</div>`;
@@ -1448,10 +1518,11 @@ function exploreTick(){
 // ---------------- controls ----------------
 function setActs(){
   const a=$('#acts');
+  const torchB=`<button data-a="torch" class="${G.torch===false?'':'on'}">${G.torch===false?'◌ TORCH':'◉ TORCH'}</button>`;
   const look=`<button data-a="look" class="${lookMode?'on':''}">LOOK</button>`,face=`<button data-a="face" id="faceBtn" class="${faceMode?'on':''}">FACE</button>`;
   if(SB){a.className='nine';a.innerHTML=`<button data-a="brush" style="color:${brushColor(SB.brush)}">✎ ${brushLabel(SB.brush).toUpperCase()}</button><button data-a="step">STEP</button><button data-a="run" class="${SB.running?'on':''}">${SB.running?'❚❚ PAUSE':'▶ RUN'}</button>`+
-    `${face}<button data-a="items">ITEMS</button>${look}<button data-a="menu">MENU</button>`}
-  else{a.className='six';a.innerHTML=`${face}<button data-a="items">ITEMS</button>${look}<button data-a="explore" class="${exploring?'on':''}">${exploring?'■ STOP':'EXPLORE'}</button><button data-a="stairs">&gt; STAIRS</button><button data-a="params">⚙ ENGINE</button>`}
+    `${face}<button data-a="items">ITEMS</button>${look}${torchB}<button data-a="menu">MENU</button>`}
+  else{a.className='nine';a.innerHTML=`${face}<button data-a="items">ITEMS</button>${look}<button data-a="explore" class="${exploring?'on':''}">${exploring?'■ STOP':'EXPLORE'}</button>${torchB}<button data-a="stairs">&gt; STAIRS</button><button data-a="params">⚙ ENGINE</button>`}
 }
 function doAction(a){
   if(modalOpen())return;
@@ -1460,6 +1531,7 @@ function doAction(a){
   if(lookMode&&a!=='look')exitLook();
   switch(a){
     case 'look':lookMode?exitLook():enterLook();break;
+    case 'torch':G.torch=G.torch===false;say(G.torch?'You light your torch.':'You douse your torch. Stick to the shadows…',G.torch?'':'dim');computeView();updateHUD();setActs();break;
     case 'explore':exploring?stopExplore('Exploration stopped.'):startExplore();break;
     case 'face':setFace(!faceMode);break;
     case 'items':openInv();break;
@@ -1490,7 +1562,7 @@ window.addEventListener('keydown',e=>{
   const key=e.key.length===1?e.key.toLowerCase():e.key;
   const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
   if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])&&!lookMode){G.player.face=[d[0],d[1]];updateHUD();return}dirInput(d[0],d[1]);return}
-  if(key==='v'){doAction('look');return}if(key==='o'&&!SB){doAction('explore');return}
+  if(key==='v'){doAction('look');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
   if(key==='f'){doAction('face');return}
   stopExplore();if(lookMode)exitLook();
   if(e.key==='Tab'){e.preventDefault();mmBig=!mmBig;return}

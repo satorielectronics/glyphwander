@@ -29,3 +29,4 @@ Every build is a tagged commit. See `CHANGELOG.md` for what each one added.
 |---|---|
 | `v0.1.0` | First prototype: ASCII renderer, fire on grass, seeded dungeon |
 | `v0.8.0` | Everything through campfires and the Dawn/Storm scrolls — **pre-stealth** |
+| `v0.9.0` | Lighting & stealth: torch, vision cones, sneak attacks — **experimental** |

@@ -1,6 +1,6 @@
 # Changelog
 
-Every published build. Tagged builds can be restored with `git checkout <tag>`.
+Every published build. Builds with a `release/vX.Y.Z` branch can be restored with `git checkout release/vX.Y.Z`.
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 

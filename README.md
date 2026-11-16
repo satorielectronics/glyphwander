@@ -31,6 +31,7 @@ Every build has a `release/vX.Y.Z` branch. See `CHANGELOG.md` for what each one 
 | `release/v0.8.0` | Everything through campfires and the Dawn/Storm scrolls — **pre-stealth** |
 | `release/v0.9.0` | Lighting & stealth: torch, vision cones, sneak attacks — **experimental** |
 | `release/v0.10.0` | Full keyboard play, item stacks |
+| `release/v0.10.1` | Thrown items make enemies turn toward the sound |
 
 ## License
 GPL-3.0 — see `LICENSE`.

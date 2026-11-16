@@ -27,7 +27,7 @@ const P={
   regrow:0.015, grassGrowth:0.004, vineGrowth:0.01, fireflies:0.12,
   conduct:150, meatRot:150,
   monsterDensity:1, campEvery:90, hungerRate:10, lightRadius:5, nightChance:0.35,
-  zoom:15, showHeat:'Off', showCones:'On', darkRooms:0.35,
+  zoom:15, showHeat:'Off', showCones:'On', darkRooms:0.35, throwNoise:5,
 };
 const WIND={Calm:[0,0],N:[0,-1],NE:[.707,-.707],E:[1,0],SE:[.707,.707],S:[0,1],SW:[-.707,.707],W:[-1,0],NW:[-.707,-.707]};
 const PARAM_DEFS=[
@@ -45,6 +45,7 @@ const PARAM_DEFS=[
   {h:'LIGHT & STEALTH'},
   {k:'darkRooms',label:'Dark rooms',min:0,max:1,step:0.05},
   {k:'showCones',label:'Vision cones',select:['On','Off']},
+  {k:'throwNoise',label:'Throw noise',min:1,max:10,step:1},
   {h:'AIR'},
   {k:'windDir',label:'Wind',select:Object.keys(WIND)},
   {k:'windStrength',label:'Wind bias',min:0,max:1,step:0.05},
@@ -362,10 +363,20 @@ function detects(m){
   return h01(P.seed,G.turn,m.id,60)<chance;
 }
 function faceToward(m,x,y){const dx=sgn(x-m.x),dy=sgn(y-m.y);if(dx||dy)m.face=[dx,dy]}
-function noise(x,y,r,why){
-  for(const m of G.ents){if(m.dead||m.alert>0||cheb(m.x,m.y,x,y)>r)continue;
-    faceToward(m,x,y);m.sus=4;m.tx=x;m.ty=y;if(seenBy(m.x,m.y))fxGlyph(m.x,m.y,'?','#ffe24a',0,500)}
+// A sound at (x,y) carries r tiles; walls muffle it to half that. Every creature that hears it turns to face it.
+// Unaware ones grow suspicious and go to look; alerted ones that have lost sight of you go to check it too.
+function noise(x,y,r){
+  const p=G.player;let heard=0;
+  for(const m of G.ents){if(m.dead)continue;const d=cheb(m.x,m.y,x,y);if(d>r)continue;
+    if(d>Math.ceil(r/2)&&!los(m.x,m.y,x,y))continue;
+    faceToward(m,x,y);heard++;
+    if(m.alert>0){if(!los(m.x,m.y,p.x,p.y)){m.tx=x;m.ty=y}}
+    else{m.sus=Math.max(m.sus,4);m.tx=x;m.ty=y}
+    if(seenBy(m.x,m.y))fxGlyph(m.x,m.y,'?','#ffe24a',0,600)}
+  return heard;
 }
+// how far a thrown item's landing carries
+function throwNoise(it){const k=it.kind;return Math.max(1,P.throwNoise+(['weapon','oilJar','miasma','lumber'].includes(k)||isBag(it)?1:['seeds','dryGrass','herb','onigiri','grilled'].includes(k)?-2:0))}
 function computeCones(){
   const N=W*H;if(!G.cone||G.cone.length!==N)G.cone=new Uint8Array(N);G.cone.fill(0);
   if(P.showCones!=='On')return;
@@ -737,9 +748,9 @@ function monsterAct(m){
     if(best&&stepToward(m,...best))return;
   }
   if(m.tx==null&&m.trail&&G.flies.length){let best=null,bd=9;for(const f of G.flies){const dd=cheb(m.x,m.y,f.x,f.y);if(dd<bd){bd=dd;best=f}}if(best){m.tx=best.x;m.ty=best.y}}
-  if(m.tx!=null){const ok=stepToward(m,m.tx,m.ty);if(!ok||(m.x===m.tx&&m.y===m.ty)){m.tx=null;m.ty=null;if(m.sus&&!m.alert){m.face=DIRS8[(DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1])+4)%8]}}return}
-  // unaware: sometimes pause and look around (sentries turn 45°)
-  if(h01(P.seed,G.turn,m.id,61)<0.3){const k=DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1]);m.face=DIRS8[(k+(h01(P.seed,G.turn,m.id,62)<0.5?1:7))%8];return}
+  if(m.tx!=null){const tx=m.tx,ty=m.ty,ok=stepToward(m,tx,ty);if(!ok||(m.x===tx&&m.y===ty)){m.tx=null;m.ty=null;if(m.sus&&!m.alert&&!ok)faceToward(m,tx,ty)}return}
+  // unaware: sometimes pause and look around (sentries turn 45°) — not while still suspicious of a sound
+  if(!m.sus&&h01(P.seed,G.turn,m.id,61)<0.3){const k=DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1]);m.face=DIRS8[(k+(h01(P.seed,G.turn,m.id,62)<0.5?1:7))%8];return}
   for(let k=0;k<8;k++){
     const [ex,ey]=DIRS8[m.dir];
     if(freeStep(m,ex,ey)&&G.rng()<0.85){moveMonster(m,m.x+ex,m.y+ey);return}
@@ -883,7 +894,9 @@ function throwIt(it){
   path.forEach(([x,y],n)=>fxGlyph(x,y,d.ch,d.color,n*30,90));
   const [lx,ly]=path.length?path[path.length-1]:[p.x,p.y];
   say(`You throw the ${d.name}.`);
-  noise(lx,ly,3);
+  if(hit&&!hit.dead){faceToward(hit,p.x,p.y);if(!hit.alert){hit.sus=4;hit.tx=p.x;hit.ty=p.y}}
+  const heard=noise(lx,ly,throwNoise(it));
+  if(heard&&!hit)say(`It clatters on the ground. ${heard===1?'Something':heard+' things'} turn${heard===1?'s':''} toward the sound.`,'dim');
   if(it.kind==='oilJar'){
     if(G.tile[idx(lx,ly)]===T_FIRE){explode(lx,ly,'The jar bursts into a fireball!');return}
     say('Oil splashes everywhere.','dim');

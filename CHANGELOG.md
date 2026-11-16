@@ -4,6 +4,14 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.10.1 — Thrown items draw attention
+- Every creature that hears a thrown item land turns to face the spot. Unaware ones investigate;
+  alerted ones glance over, and go to check it if they've lost sight of you.
+- Landing sound carries 5 tiles by default (heavy items 6, light ones 3); walls muffle it to half.
+  Adjustable in ENGINE → Light & Stealth → Throw noise.
+- A creature hit by a thrown item turns toward you. Creatures no longer about-face after
+  investigating a sound they couldn't reach.
+
 ## v0.10.0 — Full keyboard play, item stacks
 - Every menu works from the keyboard: ↑↓ select items, ←→ pick an action, Enter does it,
   Esc goes back; letter hotkeys on every action (hints show on keyboard devices).

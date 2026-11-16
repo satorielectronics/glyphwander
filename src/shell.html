@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Glyphwander</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#06080b;color:#cfd6e0;font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:960px;margin:0 auto}
+#hud{display:flex;gap:10px;align-items:center;padding:8px 10px 6px;font-size:12px;border-bottom:1px solid #141a23;flex-wrap:wrap}
+#hud .t{color:#ff8a3d;font-weight:700;letter-spacing:.12em}
+#hud b{color:#fff;font-weight:700}
+.bar{display:inline-block;width:56px;height:6px;background:#1a222d;border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:4px}
+.bar i{display:block;height:100%;background:#7fe07f}
+#view{position:relative;flex:1;min-height:0}
+canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+#log{height:62px;padding:5px 10px;font-size:11.5px;line-height:1.38;overflow:hidden;border-top:1px solid #141a23}
+#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.good{color:#9be070}.bad{color:#ff6a5a}.warn{color:#f0c060}.fire{color:#ff9a4a}.ice{color:#7fd8ff}.zap{color:#ffe24a}.dim{color:#6b7787}
+#controls{display:flex;justify-content:space-between;align-items:center;padding:6px 10px 12px;gap:12px}
+#dpad{display:grid;grid-template-columns:repeat(3,50px);grid-template-rows:repeat(3,50px);gap:4px}
+button{font:inherit;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:9px;touch-action:none}
+button:active{background:#1a2432}
+button:disabled{opacity:.35}
+.btns.col{flex-direction:column}
+.btns.col button{flex:none;height:44px}
+canvas{touch-action:none}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+.chip{padding:8px 10px;font-size:11.5px}
+.chip.on{border-color:#ff8a3d;box-shadow:0 0 10px #ff8a3d44 inset}
+#acts.six{grid-template-columns:1fr 1fr}
+#acts.nine{grid-template-columns:1fr 1fr 1fr;max-width:250px}
+#acts.nine button{height:48px;font-size:10.5px;letter-spacing:.04em}
+#lookCard{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(8,11,16,.93);border:1px solid #ff8a3d66;border-radius:10px;padding:8px 10px;font-size:11.5px;line-height:1.45;pointer-events:none;max-height:46%;overflow:hidden}
+#lookCard[hidden]{display:none}
+#lookCard .lh{font-weight:700;color:#fff;margin-top:2px}
+#lookCard .lh span{display:inline-block;width:14px;text-align:center}
+#acts.six button{height:48px}
+#dpad button{font-size:18px}
+#acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:1;max-width:230px}
+#acts button{height:50px;font-size:11.5px;letter-spacing:.08em}
+.on{border-color:#ff8a3d!important;color:#ffb27a!important;box-shadow:0 0 12px #ff8a3d44 inset}
+.modal{position:fixed;inset:0;background:#000b;display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.modal[hidden]{display:none}
+.modal.clear{background:rgba(0,0,0,.12)}
+.aim{display:flex;gap:12px;align-items:center}
+.aimgrid{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px);gap:4px;flex:none}
+.aimgrid button{font-size:17px}
+.aimgrid span{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+.sheet{background:#0b0f15;border:1px solid #243041;border-bottom:none;border-radius:14px 14px 0 0;width:100%;max-width:640px;max-height:82dvh;overflow:auto;padding:14px 14px 20px;box-sizing:border-box}
+.sheet h3{margin:0 0 10px;font-size:13px;letter-spacing:.14em;color:#ff8a3d}
+.row{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid #141a23;cursor:pointer;font-size:13px}
+.row.sel{background:#141c27}
+.row .g{width:18px;text-align:center;font-weight:700}
+.desc{font-size:12px;color:#9aa6b6;margin:10px 4px;line-height:1.45}
+.btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btns button{flex:1;min-width:80px;height:44px;font-size:12px;letter-spacing:.08em}
+.prm{display:grid;grid-template-columns:120px 1fr 44px;gap:8px;align-items:center;font-size:12px;padding:5px 2px}
+.prm input[type=range]{width:100%;accent-color:#ff8a3d}
+.prm span{text-align:right;color:#fff}
+select,input[type=number]{font:inherit;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:6px;padding:6px;width:100%;box-sizing:border-box}
+.ph{font-size:11px;letter-spacing:.14em;color:#ff8a3d;margin:12px 2px 2px}
+.note{font-size:11px;color:#6b7787;line-height:1.5;margin:8px 2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud"></div>
+  <div id="view"><canvas id="c"></canvas><div id="lookCard" hidden></div></div>
+  <div id="log"></div>
+  <div id="controls">
+    <div id="dpad">
+      <button data-d="-1,-1">↖</button><button data-d="0,-1">↑</button><button data-d="1,-1">↗</button>
+      <button data-d="-1,0">←</button><button data-d="0,0" style="font-size:12px">wait</button><button data-d="1,0">→</button>
+      <button data-d="-1,1">↙</button><button data-d="0,1">↓</button><button data-d="1,1">↘</button>
+    </div>
+    <div id="acts">
+    </div>
+  </div>
+</div>
+<div class="modal" id="modal" hidden><div class="sheet" id="sheet"></div></div>
+

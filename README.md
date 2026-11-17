@@ -5,12 +5,15 @@ deterministic roguelike with fun emergent behaviors.
 A Shiren-the-Wanderer-style roguelike rendered entirely in ASCII glyphs, built on a small
 deterministic engine with cellular-automata systems (fire, heat, gas, water, growth).
 
-Open `index.html` in any browser to play — it's a single self-contained file. Press `?` in game for keyboard controls.
+**Play online:** https://satorielectronics.github.io/glyphwander/ — always the latest commit on `main`.
+
+Or open `index.html` in any browser to play — it's a single self-contained file. Press `?` in game for keyboard controls.
 
 ## Source layout
 - `src/game.js` — the whole engine and UI
 - `src/shell.html` — page markup and CSS
 - `build.sh` — assembles `index.html` from `src/`
+- `.github/workflows/pages.yml` — rebuilds and deploys the site on every push to `main`
 
 ## Rolling back
 Every build has its own branch. To play or restore an older one:

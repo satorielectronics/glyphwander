@@ -39,6 +39,12 @@ canvas{touch-action:none}
 #acts.nine button{height:48px;font-size:10px;letter-spacing:0;white-space:nowrap;padding:0 2px}
 #lookCard{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(8,11,16,.93);border:1px solid #ff8a3d66;border-radius:10px;padding:8px 10px;font-size:11.5px;line-height:1.45;pointer-events:none;max-height:46%;overflow:hidden}
 #lookCard[hidden]{display:none}
+#console{position:absolute;left:0;right:0;top:0;background:rgba(4,6,9,.95);border-bottom:1px solid #ff8a3d77;font-size:12px;z-index:5;padding:6px 10px 8px}
+#console[hidden]{display:none}
+#conOut{max-height:170px;overflow:auto;line-height:1.45;white-space:pre-wrap}
+#conOut .cmd{color:#ff8a3d}#conOut .good{color:#9be070}#conOut .bad{color:#ff7a6a}#conOut .dim{color:#6b7787}
+.conRow{display:flex;gap:6px;align-items:center;margin-top:4px;color:#ff8a3d}
+#conIn{flex:1;background:transparent;border:none;outline:none;color:#fff;font:inherit;font-size:13px}
 #lookCard .lh{font-weight:700;color:#fff;margin-top:2px}
 #lookCard .lh span{display:inline-block;width:14px;text-align:center}
 #acts.six button{height:48px}
@@ -78,7 +84,7 @@ select,input[type=number]{font:inherit;background:#0d1219;color:#cfd6e0;border:1
 <body>
 <div id="app">
   <div id="hud"></div>
-  <div id="view"><canvas id="c"></canvas><div id="lookCard" hidden></div></div>
+  <div id="view"><canvas id="c"></canvas><div id="lookCard" hidden></div><div id="console" hidden><div id="conOut"></div><div class="conRow"><span>&gt;</span><input id="conIn" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" enterkeyhint="go"></div></div></div>
   <div id="log"></div>
   <div id="controls">
     <div id="dpad">

@@ -4,6 +4,16 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.12.0 — Console
+- `~` (or `` ` ``) opens a console over the map; also ENGINE → CONSOLE for touch devices.
+- spawn <monster|item> [count] places things next to you, preferring the way you face —
+  e.g. `spawn goblin 3`, `spawn katana +2 fire ice`, `spawn lumber 20`, `spawn blacksmith`.
+- give <item> [count] puts items straight into your pack (stacks split properly; overflow drops).
+- gold <n>, heal, god (no damage), reveal, floor <n>, kill (everything in view),
+  list monsters|items|weapons, clear, help.
+- Forgiving names (`gob`, `fire staff`, `mithril edge`), Tab completion, ↑↓ history.
+- Runs where the console was used are marked "console used" on the end screen.
+
 ## v0.11.5 — Left-hand keys
 - Map: Q = LOOK, W = TORCH, D = STAIRS (L, T and > still work).
 - Item screens (pack, bag view, aim screen, split / read / put choosers): options are lettered

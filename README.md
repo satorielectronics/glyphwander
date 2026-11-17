@@ -39,6 +39,7 @@ Every build has a `release/vX.Y.Z` branch. See `CHANGELOG.md` for what each one 
 | `release/v0.11.0` | Trees, ore & smithing, tainted jerky, noise pathing, save/load |
 | `release/v0.11.1` | Aimed zaps, zapping from bags, numpad 0 explores |
 | `release/v0.11.2` | Choose how far to throw |
+| `release/v0.11.3` | Shift+arrows set throw distance |
 
 ## License
 GPL-3.0 — see `LICENSE`.

@@ -4,6 +4,10 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.11.3 — Shift+arrows set throw distance
+- On the throw aim screen, Shift+← / Shift+→ (and Shift+numpad 4 / 6) shorten or lengthen the throw.
+  Works with NumLock on, where the browser reports Shift+numpad 4/6 as plain arrows.
+
 ## v0.11.2 — Choose how far to throw
 - The throw aim screen has a Distance control (1–10, − / + buttons or keys, MAX). The map line,
   the × landing marker and the description follow it, and the item lands exactly there unless

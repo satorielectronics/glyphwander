@@ -43,6 +43,7 @@ Every build has a `release/vX.Y.Z` branch. See `CHANGELOG.md` for what each one 
 | `release/v0.11.4` | Explosion smoke fix, Tab for items, M for map |
 | `release/v0.11.5` | Left-hand keys: Q look, W torch, D stairs, Q W E A… in item screens |
 | `release/v0.12.0` | Console (~) for spawning monsters and items |
+| `release/v0.12.1` | Put out and relight campfires |
 
 ## License
 GPL-3.0 — see `LICENSE`.

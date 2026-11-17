@@ -110,8 +110,8 @@ select,input[type=number]{font:inherit;background:#0d1219;color:#cfd6e0;border:1
 // ============================================================
 const W=48,H=32;
 const T_WALL=0,T_FLOOR=1,T_GRASS=2,T_WATER=3,T_FIRE=4,T_ASH=5,T_OIL=6,T_ICE=7,T_STAIRS=8,
-      T_MUD=9,T_DIRT=10,T_VINE=11,T_VINE_ICE=12,T_GRATE=13,T_SNOW=14,T_SLICK=15,T_CAMP=16,T_TREE=17;
-const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs','mud','dirt','vines','frozen vines','grate','snow','slick ice','campfire','tree'];
+      T_MUD=9,T_DIRT=10,T_VINE=11,T_VINE_ICE=12,T_GRATE=13,T_SNOW=14,T_SLICK=15,T_CAMP=16,T_TREE=17,T_PIT=18;
+const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs','mud','dirt','vines','frozen vines','grate','snow','slick ice','campfire','tree','fire pit'];
 const DIRS8=[[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
 const DIRS4=[[0,-1],[1,0],[0,1],[-1,0]];
 const ARROWS={'0,-1':'↑','1,-1':'↗','1,0':'→','1,1':'↘','0,1':'↓','-1,1':'↙','-1,0':'←','-1,-1':'↖'};
@@ -407,6 +407,19 @@ function spawnCamp(initial){
   if(G.rng()<0.5){const d=DIRS8[Math.floor(G.rng()*8)];if(walkable(x+d[0],y+d[1])){const it=mkItem(G.rng()<0.6?'lumber':'dryGrass');it.n=1+Math.floor(G.rng()*3);placeFloor(x+d[0],y+d[1],it)}}
   if(!initial)say('You smell woodsmoke somewhere on this floor.','dim');
 }
+function campMenu(ci){
+  const lit=G.tile[ci]===T_CAMP,fuel=G.fuel[ci],L=findItem('lumber'),opts=[];
+  if(lit)opts.push({label:'Put it out — leaves a dark fire pit that keeps its fuel',ch:'~',color:'#7fb8ff',fn:()=>act(()=>{
+    G.tile[ci]=T_PIT;G.heat[ci]=Math.min(G.heat[ci],0.6);G.gas[ci]=Math.min(1,G.gas[ci]+0.35);noise(ci%W,(ci/W)|0,2);
+    say(`You smother the campfire. It's dark now. (${fuel} turns of fuel left in the pit)`,'dim');fxGlyph(ci%W,(ci/W)|0,'~','#9aa0a8',0,400)})});
+  else opts.push({label:fuel>0?`Relight it — ${fuel} turns of fuel`:'Relight it — no fuel left (add lumber first)',ch:'^',color:'#ffb050',fn:()=>{
+    if(fuel<=0){say('Nothing left to burn. Add some lumber first.','dim');return campMenu(ci)}
+    act(()=>{G.tile[ci]=T_CAMP;G.heat[ci]=0.95;say('You strike a spark. The campfire crackles back to life.','fire');fxGlyph(ci%W,(ci/W)|0,'^','#ffb050',0,500)})}});
+  opts.push({label:L?`Add lumber (+60 fuel → ${fuel+60})`:'Add lumber — you have none',ch:'=',color:'#c08a50',fn:()=>{
+    if(!findItem('lumber')){say('You have no lumber.','dim');return campMenu(ci)}
+    act(()=>{removeFound(findItem('lumber'));G.fuel[ci]=Math.min(9999,G.fuel[ci]+60);say(`You add lumber to the ${lit?'campfire':'fire pit'}. (${G.fuel[ci]} turns of fuel)`,lit?'fire':'')})}});
+  choose(lit?`CAMPFIRE · ${fuel} TURNS OF FUEL`:`FIRE PIT (OUT) · ${fuel} TURNS OF FUEL`,opts,closeModal);
+}
 function nextToCamp(){const p=G.player;for(const [dx,dy] of DIRS8){const x=p.x+dx,y=p.y+dy;if(inb(x,y)&&G.tile[idx(x,y)]===T_CAMP)return true}return false}
 // find an item in pack or bags: returns [container,index]
 function findItem(kind){const p=G.player;let k=p.inv.findIndex(x=>x.kind===kind);if(k>=0)return [p.inv,k];
@@ -426,7 +439,7 @@ function buildCampfire(){
   fxGlyph(x,y,'^','#ffb050',0,500);return true}
 
 // ---------------- queries ----------------
-function passTile(t){return t!==T_WALL&&t!==T_VINE&&t!==T_VINE_ICE&&t!==T_CAMP&&t!==T_TREE}
+function passTile(t){return t!==T_WALL&&t!==T_VINE&&t!==T_VINE_ICE&&t!==T_CAMP&&t!==T_TREE&&t!==T_PIT}
 function entAt(x,y){if(!G.ents)return null;for(const e of G.ents)if(!e.dead&&e.x===x&&e.y===y)return e;return null}
 function occupant(x,y){return entAt(x,y)||(G.player.x===x&&G.player.y===y?G.player:null)||(G.npc&&G.npc.x===x&&G.npc.y===y?G.npc:null)}
 function canDiag(x,y,dx,dy){if(dx&&dy)return G.tile[idx(x+dx,y)]!==T_WALL&&G.tile[idx(x,y+dy)]!==T_WALL;return true}
@@ -583,6 +596,7 @@ function ignite(i){const t=G.tile[i];
   else if(t===T_OIL||t===T_SLICK){G.tile[i]=T_FIRE;G.fuel[i]=2;G.src[i]=2;G.stored[i]=0}
   else if(t===T_VINE){G.tile[i]=T_FIRE;G.fuel[i]=2;G.src[i]=3}
   else if(t===T_TREE){G.tile[i]=T_FIRE;G.fuel[i]=10;G.src[i]=4}
+  else if(t===T_PIT&&G.fuel[i]>0){G.tile[i]=T_CAMP;if(G.vis[i])say('The fire pit catches and flares back to life.','fire')}
   else if(t===T_VINE_ICE)G.tile[i]=T_VINE;
   else if(t===T_ICE||t===T_SNOW){G.tile[i]=T_WATER;plunge(i)}
   else if(t===T_MUD)G.tile[i]=T_DIRT;
@@ -591,7 +605,7 @@ function ignite(i){const t=G.tile[i];
 }
 function frostCell(i){const t=G.tile[i];
   if(t===T_WATER)G.tile[i]=T_ICE;
-  else if(t===T_CAMP){G.tile[i]=T_ASH;G.fuel[i]=0;if(G.vis[i])say('The campfire is snuffed out.','ice')}
+  else if(t===T_CAMP){G.tile[i]=T_PIT;if(G.vis[i])say('The campfire is snuffed out — it can be relit.','ice')}
   else if(t===T_FIRE){if(G.src[i]===2){G.tile[i]=T_SLICK;G.stored[i]=1}else G.tile[i]=T_ASH;G.fuel[i]=0}
   else if(t===T_OIL){G.tile[i]=T_SLICK;G.stored[i]=0}
   else if(t===T_VINE)G.tile[i]=T_VINE_ICE;
@@ -645,6 +659,7 @@ function worldStep(){
     }
     const r=h01(S,T,i,1),hh=nh[i];
     switch(c){
+      case T_PIT: if(f[i]>0&&((fireN&&r<0.25)||(hh>P.ignitePoint&&h01(S,T,i,8)<0.3))){nt[i]=T_CAMP;if(G.vis[i])say('Flames reach the fire pit — it relights.','fire')}break;
       case T_CAMP: nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0;if(G.vis[i])say('A campfire burns down to embers.','dim')}break;
       case T_FIRE: nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0;if(G.src[i]===1)burntGrass.push(i)}break;
       case T_GRASS:case T_OIL:case T_VINE:case T_TREE:
@@ -739,7 +754,7 @@ function stormStep(){
     G.gas[i]*=0.7;G.pois[i]*=0.85;G.heat[i]+=(0.12-G.heat[i])*0.2;
     const r=h01(S,T,i,40);
     if(t===T_FIRE&&r<0.4){G.tile[i]=T_ASH;G.fuel[i]=0}
-    else if(t===T_CAMP&&r<0.08){G.tile[i]=T_ASH;G.fuel[i]=0;if(G.vis[i])say('The rain hisses out a campfire.','ice')}
+    else if(t===T_CAMP&&r<0.08){G.tile[i]=T_PIT;if(G.vis[i])say('The rain hisses out a campfire. It can be relit once it stops.','ice')}
     else if(t===T_ASH&&r<0.05)G.tile[i]=T_MUD;
     else if((t===T_FLOOR||t===T_DIRT)&&r<0.012)G.tile[i]=T_WATER;
     else if(t===T_SNOW&&r<0.05)G.tile[i]=T_WATER;
@@ -967,9 +982,7 @@ function playerMove(dx,dy){
       placeFloor(nx,ny,o);noise(nx,ny,5);fxGlyph(nx,ny,'*',ITEMS[o.kind].color,0,300);say(`You break open the vein: ${itemName(o)}!`,'good');endTurn();return}
     G.tile[idx(nx,ny)]=T_FLOOR;G.heat[idx(nx,ny)]=G.heat[idx(p.x,p.y)];noise(nx,ny,4);say('You dig through the wall.','dim');fxGlyph(nx,ny,'#','#9aa6b6');endTurn();return}
   if(!canDiag(p.x,p.y,dx,dy))return;
-  if(t===T_CAMP){const ci=idx(nx,ny),k=findItem('lumber');
-    if(k){removeFound(k);G.fuel[ci]=Math.min(9999,G.fuel[ci]+60);say(`You feed lumber to the campfire. (${G.fuel[ci]} turns of fuel)`,'fire');endTurn()}
-    else say(`The campfire crackles — ${G.fuel[ci]} turns of fuel left. Lumber would keep it going.`,'dim');return}
+  if(t===T_CAMP||t===T_PIT){campMenu(idx(nx,ny));return}
   if(t===T_VINE){G.tile[idx(nx,ny)]=T_GRASS;say('You hack through the vines.','dim');
     if(h01(P.seed,G.turn,idx(nx,ny),50)<0.5){placeFloor(nx,ny,mkItem('dryGrass'));say('Some dry grass falls loose.','dim')}endTurn();return}
   if(t===T_VINE_ICE){G.tile[idx(nx,ny)]=T_FLOOR;say('The frozen vines shatter!','ice');fxGlyph(nx,ny,'*','#bff6ff')}
@@ -1100,6 +1113,7 @@ function useItem(k,bag){
     case 'rain':say('Rain pours down around you.','ice');
       area(3,(x,y,i)=>{const t=G.tile[i];
         if(t===T_FIRE){G.tile[i]=T_MUD;G.fuel[i]=0}
+        else if(t===T_CAMP)G.tile[i]=T_PIT;
         else if(t===T_ASH)G.tile[i]=T_MUD;
         else if((t===T_FLOOR||t===T_DIRT)&&h01(P.seed,G.turn,i,9)<0.5)G.tile[i]=T_WATER;
         G.gas[i]=0;G.pois[i]*=0.3;G.heat[i]=Math.min(G.heat[i],0.15);fxGlyph(x,y,'\'','#7fb8ff',h01(i,1,2,3)*300,250)});break;
@@ -1225,6 +1239,7 @@ function render(now){
         case T_SNOW: if(G.prints[i]&&sx===1&&sy!==1){ch=':';b=0.3;pal=PAL.floor}else{b=0.35+0.55*n;ramp=RAMP.snow;pal=PAL.snow}break;
         case T_SLICK:{b=0.55+0.4*h01(i,sx,sy,fr2);ramp=RAMP.slick;pal=G.stored[i]&&h01(i,sx,sy,fr)<0.3?PAL.fire:PAL.slick;if(G.stored[i])lit=true;break}
         case T_WATER:{const w=Math.sin(now*0.0025+x*0.9+y*0.45+sx*0.8-sy*0.3);b=0.45+0.3*w;ch=w>0.3?'~':w>-0.4?'-':'.';pal=PAL.water;break}
+        case T_PIT:{if(sy===2){ch=sx===1?'#':'=';b=0.45+0.2*n;pal=PAL.logs}else if(sy===1&&G.heat[i]>0.4&&h01(i,sx,sy,fr2)<0.35){ch=sx===1?'.':',';b=0.5+0.3*h01(i,sx,sy,fr);pal=PAL.fire;lit=true}else{ch=sy===1?(sx===1?'o':' '):' ';b=0.3;pal=PAL.ash}break}
         case T_TREE:{if(sy===2){ch=sx===1?'|':(n<0.5?',':' ');b=0.5+0.3*n;pal=sx===1?PAL.logs:PAL.grass}else{const sway=h01(i,sx,sy,fr2)<0.15;ch=sy===0?(sx===1?'^':'%'):(sx===1?'&':'%');if(sway)ch='*';b=0.55+0.4*n;pal=PAL.leaf}break}
         case T_CAMP:{const f=h01(i,sx,sy,fr);if(sy===2){ch=sx===1?'#':'=';b=0.55+0.2*n;pal=PAL.logs}else{b=sy===1?0.65+0.35*f:0.35+0.5*f*(sx===1?1:0.5);ramp=RAMP.fire;pal=PAL.fire}lit=true;break}
         case T_FIRE:{const f=h01(i,sx,sy,fr);b=0.45+0.55*f-sy*0.08+(G.fuel[i]>1?0.1:0);ramp=RAMP.fire;pal=PAL.fire;lit=true;break}
@@ -1300,7 +1315,7 @@ function render(now){
 }
 // ---------------- minimap ----------------
 let mmCanvas=null,mmBig=false,mmRect=null;
-const MM_COL={[T_TREE]:[40,110,50],[T_CAMP]:[255,176,70],[T_FLOOR]:[34,42,54],[T_GRASS]:[48,96,42],[T_WATER]:[30,84,140],[T_FIRE]:[255,123,46],[T_ASH]:[60,56,52],[T_OIL]:[96,60,140],[T_ICE]:[140,200,225],
+const MM_COL={[T_PIT]:[120,90,60],[T_TREE]:[40,110,50],[T_CAMP]:[255,176,70],[T_FLOOR]:[34,42,54],[T_GRASS]:[48,96,42],[T_WATER]:[30,84,140],[T_FIRE]:[255,123,46],[T_ASH]:[60,56,52],[T_OIL]:[96,60,140],[T_ICE]:[140,200,225],
   [T_STAIRS]:[190,246,255],[T_MUD]:[92,70,46],[T_DIRT]:[70,60,48],[T_VINE]:[40,120,60],[T_VINE_ICE]:[120,200,210],[T_GRATE]:[90,104,116],[T_SNOW]:[200,214,230],[T_SLICK]:[150,120,220]};
 function buildMinimap(){
   if(!G||!G.tile)return;
@@ -1586,12 +1601,12 @@ function showEnd(title,body){
 //  SANDBOX
 // ============================================================
 const BRUSHES=[
-  ['GROUND',[['t:1','floor'],['t:0','wall'],['t:2','grass'],['t:3','water'],['t:6','oil'],['t:7','ice'],['t:9','mud'],['t:10','dirt'],['t:11','vines'],['t:13','grate'],['t:14','snow'],['t:15','slick ice'],['t:5','ash'],['t:4','fire'],['t:16','campfire'],['t:17','tree'],['o:1','iron vein (on wall)'],['o:2','mithril vein (on wall)']]],
+  ['GROUND',[['t:1','floor'],['t:0','wall'],['t:2','grass'],['t:3','water'],['t:6','oil'],['t:7','ice'],['t:9','mud'],['t:10','dirt'],['t:11','vines'],['t:13','grate'],['t:14','snow'],['t:15','slick ice'],['t:5','ash'],['t:4','fire'],['t:16','campfire'],['t:17','tree'],['t:18','fire pit (out)'],['o:1','iron vein (on wall)'],['o:2','mithril vein (on wall)']]],
   ['AIR & ENERGY',[['a:smoke','smoke'],['a:pois','poison'],['a:hot','heat'],['a:cold','cold'],['a:zap','lightning']]],
   ['CREATURES',[...Object.keys(MON).map(k=>['m:'+k,MON[k].name]),['npc','blacksmith'],['erase','erase thing']]],
   ['ITEMS',Object.keys(ITEMS).map(k=>['i:'+k,ITEMS[k].name])],
 ];
-const BRUSH_COL={'o:1':'#d08a5a','o:2':'#9fe8ff','t:17':'#4fb060','t:16':'#ffb050','t:0':'#8a96a8','t:1':'#5a6575','t:2':'#7fd060','t:3':'#4aa8ff','t:4':'#ff7b2e','t:5':'#8a8078','t:6':'#b07cff','t:7':'#9fe8ff','t:9':'#a07848','t:10':'#b09a78','t:11':'#4fc060','t:13':'#9aa6b6','t:14':'#f0f6ff','t:15':'#c9a8ff',
+const BRUSH_COL={'t:18':'#c08a50','o:1':'#d08a5a','o:2':'#9fe8ff','t:17':'#4fb060','t:16':'#ffb050','t:0':'#8a96a8','t:1':'#5a6575','t:2':'#7fd060','t:3':'#4aa8ff','t:4':'#ff7b2e','t:5':'#8a8078','t:6':'#b07cff','t:7':'#9fe8ff','t:9':'#a07848','t:10':'#b09a78','t:11':'#4fc060','t:13':'#9aa6b6','t:14':'#f0f6ff','t:15':'#c9a8ff',
   'a:smoke':'#9aa0a8','a:pois':'#c8f040','a:hot':'#ff6a3a','a:cold':'#7fb8ff','a:zap':'#fff27a',npc:'#ffb050',erase:'#ff6a5a'};
 function brushLabel(b){for(const [,l] of BRUSHES)for(const [k,n] of l)if(k===b)return n;return b}
 function brushColor(b){if(BRUSH_COL[b])return BRUSH_COL[b];if(b.startsWith('m:'))return MON[b.slice(2)].color;if(b.startsWith('i:'))return ITEMS[b.slice(2)].color;return '#cfd6e0'}
@@ -1638,7 +1653,7 @@ function applyBrush(x,y,stroke){
   if(!inb(x,y))return;const b=SB.brush,i=idx(x,y),border=x===0||y===0||x===W-1||y===H-1;
   if(b.startsWith('t:')){if(border)return;const t=+b.slice(2);if(!passTile(t)&&occupant(x,y))return;
     G.tile[i]=t;G.fuel[i]=0;G.src[i]=0;G.stored[i]=0;G.elec[i]=0;
-    G.ore[i]=0;if(t===T_FIRE){G.fuel[i]=P.burnTime;G.src[i]=1;G.heat[i]=1}else if(t===T_CAMP){G.fuel[i]=120;G.heat[i]=0.95}else if(t===T_TREE){G.fuel[i]=3}else if(COLD(t))G.heat[i]=0.1;
+    G.ore[i]=0;if(t===T_FIRE){G.fuel[i]=P.burnTime;G.src[i]=1;G.heat[i]=1}else if(t===T_CAMP){G.fuel[i]=120;G.heat[i]=0.95}else if(t===T_TREE){G.fuel[i]=3}else if(t===T_PIT){G.fuel[i]=120}else if(COLD(t))G.heat[i]=0.1;
     if(!passTile(t))G.floorItems=G.floorItems.filter(f=>!(f.x===x&&f.y===y));return}
   if(b==='o:1'||b==='o:2'){if(G.tile[i]===T_WALL&&!border)G.ore[i]=+b.slice(2);return}
   if(G.tile[i]===T_WALL)return;
@@ -1673,7 +1688,7 @@ const TDESC={[T_WALL]:'Solid rock. A pickaxe can dig through it.',[T_FLOOR]:'Bar
   [T_FIRE]:'Burning! Hurts anything standing in it.',[T_ASH]:'Burnt ground. Regrows into grass; rain turns it to mud.',[T_OIL]:'Burns fast and chains to nearby oil. Freezes into slick ice.',
   [T_ICE]:'Walkable. Melts with heat — whoever stands on it drops into freezing water.',[T_STAIRS]:'Stairs leading down.',[T_MUD]:'Traps you for a turn. Bakes into dirt when hot.',
   [T_DIRT]:'Grass regrows quickly here.',[T_VINE]:'Blocks movement and sight. Hack through it or burn it fast.',[T_VINE_ICE]:'Frozen vines. They shatter if you walk into them.',
-  [T_GRATE]:'Metal. Conducts lightning and heat; scalding when hot.',[T_SNOW]:'Shows footprints. Melts into puddles.',[T_TREE]:'A tree. Blocks movement and sight — good cover. Chop it down for lumber (3 swings, noisy). Burns for a long time.',[T_CAMP]:'A contained fire: light, heat and somewhere to cook. You heal every turn beside it. Walk into it with lumber to add fuel. Rain or frost puts it out; its embers can catch nearby grass.',[T_SLICK]:'Frozen oil. You slide across it until you hit something.'};
+  [T_GRATE]:'Metal. Conducts lightning and heat; scalding when hot.',[T_SNOW]:'Shows footprints. Melts into puddles.',[T_PIT]:'A put-out campfire. Dark and cold, but it keeps its fuel. Walk into it to relight it or add lumber; nearby fire can relight it too.',[T_TREE]:'A tree. Blocks movement and sight — good cover. Chop it down for lumber (3 swings, noisy). Burns for a long time.',[T_CAMP]:'A contained fire: light, heat and somewhere to cook. You heal every turn beside it. Walk into it with lumber to add fuel. Rain or frost puts it out; its embers can catch nearby grass.',[T_SLICK]:'Frozen oil. You slide across it until you hit something.'};
 MON.rat.desc='Scurries about; only fights when you come close.';MON.goblin.desc='Hunts you on sight.';MON.beetle.desc='Grazes on grass and chews through vines, leaving bare dirt.';
 MON.slime.desc='Splits in two when hit. Heals and multiplies in water.';MON.ember.desc='Leaves fire wherever it walks through grass or oil. Drawn to fireflies; water hurts it.';
 MON.toad.desc='Belches clouds of poison gas. Immune to poison.';MON.thief.desc='Steals an item and flees at double speed. Drops loot if it runs through fire.';
@@ -1726,7 +1741,7 @@ function updateLook(){
   for(const f of its.slice(0,2)){const d=ITEMS[f.it.kind];h+=head(d.ch,d.color,itemName(f.it))+`<div>${d.desc}${isBag(f.it)&&f.it.items.length?' Inside: '+f.it.items.map(itemName).join(', ')+'.':''}</div>`}
   if(its.length>2)h+=`<div class="dim">…and ${its.length-2} more item${its.length>3?'s':''}.</div>`;
   const env=[`${Math.round(G.heat[i]*100)}°`,`light ${Math.round(Math.min(1,G.env?G.env[i]:0)*100)}%`];if(G.gas[i]>0.05)env.push(`smoke ${Math.round(G.gas[i]*100)}%`);if(G.pois[i]>0.05)env.push(`<span style="color:#c8f040">poison ${Math.round(G.pois[i]*100)}%</span>`);
-  if(G.elec[i])env.push('<span style="color:#ffe24a">electrified</span>');if(G.stored[i])env.push('<span style="color:#ff8a3d">fire trapped inside</span>');if(G.prints[i])env.push('fresh footprints');if(t===T_CAMP)env.push(`<span style="color:#ffb050">${G.fuel[i]} turns of fuel</span>`);if(inStorm(x,y))env.push('<span style="color:#8fb0ff">in the storm</span>');
+  if(G.elec[i])env.push('<span style="color:#ffe24a">electrified</span>');if(G.stored[i])env.push('<span style="color:#ff8a3d">fire trapped inside</span>');if(G.prints[i])env.push('fresh footprints');if(t===T_PIT)env.push(`<span style="color:#c08a50">${G.fuel[i]} turns of fuel, unlit</span>`);if(t===T_CAMP)env.push(`<span style="color:#ffb050">${G.fuel[i]} turns of fuel</span>`);if(inStorm(x,y))env.push('<span style="color:#8fb0ff">in the storm</span>');
   if(G.flies.some(f=>f.x===x&&f.y===y))env.push('fireflies');
   h+=`<div class="dim" style="margin-top:4px">Ground: <b style="color:#cfd6e0">${TNAME[t]}</b> · ${env.join(' · ')} — ${TDESC[t]}</div>`;
   card.innerHTML=h;
@@ -1734,7 +1749,7 @@ function updateLook(){
 
 // ---------------- AUTO-EXPLORE ----------------
 let exploring=false,expTimer=null,expHp=0,expStall=0;
-function expCost(i){const t=G.tile[i];if(t===T_WALL||t===T_CAMP||t===T_TREE||!G.seen[i])return -1;
+function expCost(i){const t=G.tile[i];if(t===T_WALL||t===T_CAMP||t===T_TREE||t===T_PIT||!G.seen[i])return -1;
   if(t===T_FIRE||(G.elec[i]&&(t===T_WATER||t===T_GRATE))||G.pois[i]>0.2||(t===T_GRATE&&G.heat[i]>0.55)||G.heat[i]>0.8)return -1;
   return t===T_MUD?4:(t===T_VINE||t===T_VINE_ICE)?3:t===T_SLICK?8:1}
 function pathField(){

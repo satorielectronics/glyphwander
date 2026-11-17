@@ -4,6 +4,12 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.12.1 — Put out and relight campfires
+- Walk into a campfire for a menu: put it out (leaves a dark fire pit that keeps its fuel) or add lumber.
+  Walk into a fire pit to relight it or add lumber.
+- Rain, storms and frost now put campfires out into relightable pits instead of destroying them;
+  nearby flames, heat or a fire staff relight a pit that still has fuel. A doused fire gives no light — useful for sneaking.
+
 ## v0.12.0 — Console
 - `~` (or `` ` ``) opens a console over the map; also ENGINE → CONSOLE for touch devices.
 - spawn <monster|item> [count] places things next to you, preferring the way you face —

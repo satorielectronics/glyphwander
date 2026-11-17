@@ -4,6 +4,17 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.15.0 — Sleep
+- About 30% of monsters start a floor asleep (shown blue with a drifting z, no facing arrow). They never notice you,
+  but a noise close by wakes them, and they may stir if you linger next to them — more likely with your torch lit.
+- A sleeper counts as unaware with its back to you: triple sneak-attack damage. Any damage wakes it.
+- Forced sleep is magical: noise won't break it, only damage or time.
+  - Staff of Slumber: zap; the first creature hit sleeps 10 turns.
+  - Lullaby Scroll: every creature in sight within 6 tiles sleeps 12 turns.
+  - Tranq Dart: throwable stack (up to 10, found in 2–4s). A hit puts the target to sleep 14 turns without damage;
+    a miss lands on the floor to pick up again. Darts land quietly.
+- LOOK shows whether a creature is naturally asleep or how many turns of magic sleep are left.
+
 ## v0.14.0 — Cover
 - Cover is one-way: you can peek past a tree, bush or boulder right next to you, but enemies can't see through it.
   Hug cover between you and an enemy to watch it without being seen. The HUD shows ◆ in cover when no enemy in view can see you.

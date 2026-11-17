@@ -191,6 +191,7 @@ const ITEMS={
   herb:{ch:'!',color:'#7fe07f',name:'Medicinal Herb',use:true,desc:'Restores 25 HP. Raises max HP if you are already full.'},
   fireStaff:{ch:'/',color:'#ff7b2e',name:'Staff of Flame',staff:true,use:true,desc:'Zap fire forward. Ignites grass, oil and vines along the path, melts ice and snow, bakes mud.'},
   iceStaff:{ch:'/',color:'#7fd8ff',name:'Staff of Frost',staff:true,use:true,desc:'Zap frost forward. Water → ice, ground → snow, oil → slick ice, burning oil → slick ice with fire trapped inside. Freezes the target.'},
+  sleepStaff:{ch:'/',color:'#8fa8ff',name:'Staff of Slumber',staff:true,use:true,desc:'Zap forward: the first creature hit falls into a magical sleep for 10 turns. Noise won\'t wake it — but any hit will, and a sleeper takes triple sneak-attack damage.'},
   boltStaff:{ch:'/',color:'#ffe24a',name:'Staff of Thunder',staff:true,use:true,desc:'Zap lightning forward. Electrifies every connected tile of water and metal grate it touches.'},
   galeStaff:{ch:'/',color:'#e8eef5',name:'Staff of Gales',staff:true,use:true,desc:'Blast wind forward: pushes fire, smoke and poison down the line and hurls the first creature up to 3 tiles.'},
   oilJar:{ch:'!',color:'#b07cff',name:'Oil Jar',use:false,desc:'Throw to splash oil (radius 1). Oil burns fast and chains. Explodes if it lands in fire.'},
@@ -212,6 +213,8 @@ const ITEMS={
   mithrilBar:{ch:'=',color:'#7fe8ff',name:'Mithril Bar',desc:'Smelted mithril. The finest things a blacksmith makes need it.'},
   tainted:{ch:'%',color:'#b88ad8',name:'Tainted Jerky',use:true,desc:'Rotten meat, cooked. Filling (+30), but whoever eats it is paralyzed for 5 turns. Throw it at an enemy and it gulps it down and freezes up.'},
   dryGrass:{ch:'"',color:'#d8c860',name:'Dry Grass',desc:'Plant matter for kindling. With Lumber, BUILD a campfire in front of you. You often get some when hacking through vines. Burns away in fire.'},
+  lullaby:{ch:'?',color:'#8fa8ff',name:'Lullaby Scroll',use:true,desc:'A soft melody: every creature in sight within 6 tiles falls into a magical sleep for 12 turns.'},
+  tranq:{ch:')',color:'#8fa8ff',name:'Tranq Dart',desc:'Throw it at a creature: it falls asleep for 14 turns (no damage, so it stays asleep). A miss lands on the floor to be picked up again. Stacks up to 10.'},
   reveal:{ch:'?',color:'#fff7c0',name:'Dawn Scroll',use:true,desc:'Floods the whole floor with light: the entire map is revealed and every creature and item on it becomes visible.'},
   storm:{ch:'?',color:'#8fb0ff',name:'Storm Scroll',use:true,desc:'A thunderstorm breaks over the room you are in for 40 turns: rain douses fire, cools and floods the ground, and lightning strikes at random — drawn to metal grates and creatures, chained through water. Including you.'},
   honing:{ch:'?',color:'#f0f0f0',name:'Honing Scroll',use:true,bagT:true,desc:'+1 to your equipped weapon — or +1 to every weapon inside a chosen bag.'},
@@ -226,7 +229,7 @@ ITEMS.inferno.bagT=true;ITEMS.inferno.desc+=' Read onto a bag: cooks the food in
 ITEMS.rain.bagT=true;ITEMS.rain.desc+=' Read onto a bag: seeds inside sprout into herbs.';
 const WEAPONS={dagger:{name:'Dagger',atk:2},club:{name:'Club',atk:3},katana:{name:'Katana',atk:5},pickaxe:{name:'Pickaxe',atk:2,dig:true},greatsword:{name:'Greatsword',atk:7},mithril:{name:'Mithril Edge',atk:9}};
 const SEALS={fire:{tag:'F',name:'flame'},ice:{tag:'I',name:'frost'},bolt:{tag:'T',name:'thunder'},venom:{tag:'V',name:'venom'}};
-const ITEM_W=[['onigiri',13],['herb',11],['meat',3],['fireStaff',6],['iceStaff',5],['boltStaff',5],['galeStaff',5],['oilJar',8],['miasma',5],['smokeJar',5],['seeds',6],['inferno',4],['rain',4],['blizzard',4],
+const ITEM_W=[['onigiri',13],['herb',11],['meat',3],['fireStaff',6],['iceStaff',5],['boltStaff',5],['galeStaff',5],['oilJar',8],['miasma',5],['smokeJar',5],['sleepStaff',4],['lullaby',4],['tranq',6],['seeds',6],['inferno',4],['rain',4],['blizzard',4],
   ['weapon',6],['pouch',3],['satchel',2],['coldbox',2],['honing',5],['flameSeal',2],['frostSeal',2],['thunderSeal',2],['venomSeal',2],['smelting',2],['recharge',2],['lumber',6],['dryGrass',6],['reveal',3],['storm',3]];
 const MON={
   rat:{ch:'r',name:'cave rat',color:'#c8a27c',hp:5,atk:2,def:0,xp:2,min:1,w:9,ai:'wander',meat:.25},
@@ -245,7 +248,7 @@ const FINAL_FLOOR=10;
 let G=null, faceMode=false, SB=null;
 
 function pickW(list,r){let s=0;for(const [,w] of list)s+=w;let v=r*s;for(const [k,w] of list){if((v-=w)<0)return k}return list[0][0]}
-const STACK={lumber:20,dryGrass:20,seeds:10,herb:10,ironOre:10,mithrilOre:10,ironBar:10,mithrilBar:10};
+const STACK={tranq:10,lumber:20,dryGrass:20,seeds:10,herb:10,ironOre:10,mithrilOre:10,ironBar:10,mithrilBar:10};
 const qty=it=>it.n||1;
 // merge `it` into same-kind stacks of `list`; returns what is left over (or null)
 function mergeInto(list,it){const max=STACK[it.kind];if(!max)return it;
@@ -259,7 +262,7 @@ function addToPack(it){const p=G.player,max=STACK[it.kind];let left=mergeInto(p.
 function placeFloor(x,y,it){if(STACK[it.kind]){const o=G.floorItems.find(f=>f.x===x&&f.y===y&&f.it.kind===it.kind);if(o){o.it.n=qty(o.it)+qty(it);return}}G.floorItems.push({x,y,it})}
 // take one unit from a stack (or the whole item if it is not stacked)
 function takeOne(list,k){const it=list[k];if(qty(it)>1){it.n--;return Object.assign({},it,{n:1})}return list.splice(k,1)[0]}
-function mkItem(kind){const it={kind};if(STACK[kind])it.n=1;if(ITEMS[kind].staff)it.charges=3+Math.floor(G.rng()*3);if(kind==='meat')it.age=0;
+function mkItem(kind){const it={kind};if(STACK[kind])it.n=1;if(ITEMS[kind].staff)it.charges=3+Math.floor(G.rng()*3);if(kind==='meat')it.age=0;if(kind==='tranq')it.n=2+Math.floor(G.rng()*3);
   if(kind==='weapon'){it.w=pickW([['dagger',4],['club',4],['katana',2],['pickaxe',2]],G.rng());it.plus=G.rng()<0.3?1:0;it.seals=[]}
   if(ITEMS[kind].bag)it.items=[];
   if(kind==='gold')it.amt=Math.round((10+G.rng()*20)*Math.max(1,G.depth));
@@ -274,7 +277,7 @@ function itemName(it){
   return ITEMS[it.kind].name+(it.charges!=null?` [${it.charges}]`:'')+(it.frozen?' (frozen)':'')}
 function atkOf(e){return e.isPlayer&&e.weapon?e.atk+WEAPONS[e.weapon.w].atk+e.weapon.plus:e.atk}
 function mkMonster(kind,x,y){const d=MON[kind],dp=G.depth-1,hp=d.hp+Math.floor(dp*1.2);
-  const m=Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,search:0,para:0,
+  const m=Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,search:0,para:0,sleep:0,deepSleep:false,
     dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid,face:null});m.face=DIRS8[m.dir];return m}
 
 // ---------------- run / floor setup ----------------
@@ -408,8 +411,19 @@ function spawnMonster(initial){
   const pr=G.roomIdx[idx(G.player.x,G.player.y)];
   const c=randomRoomCell(c=>G.tile[c]!==T_FIRE&&(initial||!G.vis[c]),initial?(G.stairRoom===pr?-1:pr):pr);
   if(G.vis[c]&&!initial)return;
-  G.ents.push(mkMonster(kind,c%W,(c/W)|0));
+  const m=mkMonster(kind,c%W,(c/W)|0);
+  if(initial&&h01(P.seed,G.depth,m.id,70)<SLEEP_CHANCE){m.sleep=999;m.deepSleep=true}
+  G.ents.push(m);
 }
+// ---------------- sleep ----------------
+// Some monsters start a floor asleep (a noise close by can wake them). Staffs, scrolls and darts put creatures into
+// a magical sleep for a set number of turns that noise doesn't break. Any damage wakes a sleeper.
+const SLEEP_CHANCE=0.3;
+function sleepOn(m,n){if(!m||m.dead||m.npc||m.isPlayer)return false;
+  m.sleep=Math.max(m.sleep||0,n);m.deepSleep=false;m.alert=0;m.sus=0;m.tx=null;m.ty=null;m.fleeing=false;
+  if(seenBy(m.x,m.y)){say(`The ${m.name} slumps over, fast asleep. (${n} turns)`,'good');fxGlyph(m.x,m.y,'z','#8fa8ff',0,700)}return true}
+function wake(m,why){if(!m.sleep)return;m.sleep=0;m.deepSleep=false;m.sus=Math.max(m.sus,5);
+  if(seenBy(m.x,m.y)){say(`The ${m.name} wakes up${why?' '+why:''}!`,'warn');fxGlyph(m.x,m.y,'!','#ffe24a',0,500)}}
 
 function spawnCamp(initial){
   const c=randomRoomCell(c=>[T_FLOOR,T_DIRT,T_ASH].includes(G.tile[c])&&(initial||!G.vis[c]));
@@ -514,7 +528,7 @@ function computeView(){
 // ---------------- perception ----------------
 function facingDot(m,x,y){const [fx,fy]=m.face||DIRS8[m.dir||0],vx=x-m.x,vy=y-m.y,l=Math.hypot(vx,vy);if(!l)return 1;return (fx*vx+fy*vy)/(Math.hypot(fx,fy)*l)}
 function detects(m){
-  const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(!seesPlayer(m))return false;
+  const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(m.sleep>0||!seesPlayer(m))return false;
   const dot=facingDot(m,p.x,p.y);
   if(d<=1&&dot>-0.35)return true;
   const cone=dot>=0.35?1:dot>=-0.35?0.35:0.1;
@@ -529,6 +543,7 @@ function noise(x,y,r){
   const p=G.player;let heard=0;
   for(const m of G.ents){if(m.dead)continue;const d=cheb(m.x,m.y,x,y);if(d>r)continue;
     if(d>Math.ceil(r/2)&&!los(m.x,m.y,x,y))continue;
+    if(m.sleep>0){if(m.deepSleep&&d<=Math.ceil(r/2))wake(m,'at the noise');else continue}
     faceToward(m,x,y);heard++;
     if(m.alert>0){if(!los(m.x,m.y,p.x,p.y)){m.tx=x;m.ty=y}}
     else{m.sus=Math.max(m.sus,4);m.tx=x;m.ty=y}
@@ -536,11 +551,11 @@ function noise(x,y,r){
   return heard;
 }
 // how far a thrown item's landing carries
-function throwNoise(it){const k=it.kind;return Math.max(1,P.throwNoise+(['weapon','oilJar','miasma','lumber'].includes(k)||isBag(it)?1:['seeds','dryGrass','herb','onigiri','grilled'].includes(k)?-2:0))}
+function throwNoise(it){const k=it.kind;return Math.max(1,P.throwNoise+(['weapon','oilJar','miasma','lumber'].includes(k)||isBag(it)?1:['seeds','dryGrass','herb','onigiri','grilled','tranq'].includes(k)?-2:0))}
 function computeCones(){
   const N=W*H;if(!G.cone||G.cone.length!==N)G.cone=new Uint8Array(N);G.cone.fill(0);
   if(P.showCones!=='On')return;
-  for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;const v=m.alert>0?2:1;
+  for(const m of G.ents){if(!G.vis[idx(m.x,m.y)]||m.sleep>0)continue;const v=m.alert>0?2:1;
     for(let dy=-5;dy<=5;dy++)for(let dx=-5;dx<=5;dx++){if(!dx&&!dy)continue;const x=m.x+dx,y=m.y+dy;if(!inb(x,y)||Math.hypot(dx,dy)>5.3)continue;const i=idx(x,y);
       if(G.tile[i]===T_WALL||!G.seen[i]||facingDot(m,x,y)<0.38||!los(m.x,m.y,x,y))continue;G.cone[i]=Math.max(G.cone[i],v)}}
 }
@@ -557,7 +572,7 @@ function attack(a,b){
   const R=G.rng;
   let mult=1;
   if(a.isPlayer&&!b.isPlayer&&!b.npc){if(!b.face)b.face=DIRS8[b.dir||0];
-    const behind=facingDot(b,a.x,a.y)<-0.35,unaware=!(b.alert>0)||b.para>0;
+    const behind=facingDot(b,a.x,a.y)<-0.35||b.sleep>0,unaware=!(b.alert>0)||b.para>0||b.sleep>0;
     mult=behind&&unaware?3:behind||unaware?2:1;
     b.alert=8;b.sus=0;b.tx=a.x;b.ty=a.y;
     noise(a.x,a.y,4)}
@@ -591,6 +606,7 @@ function hurt(e,dmg,cause){
   if(e.isPlayer){if(CAUSE_TEXT[cause])G.cause=CAUSE_TEXT[cause];
     if(e.hp<=0){if(G.sandbox){e.hp=e.maxhp;say(`That would have killed you (${G.cause||cause}). HP restored.`,'bad');return}e.hp=0;gameOver()}return}
   if(e.hp<=0){kill(e,cause);return}
+  if(e.sleep)wake(e,'with a start');
   if(e.split&&e.hp>=4)trySplit(e);
 }
 function trySplit(e){
@@ -955,6 +971,12 @@ function monstersAct(){
     if(m.split&&G.tile[i]===T_WATER){m.hp=Math.min(m.maxhp+6,m.hp+2);if(m.hp>=m.maxhp+4){trySplit(m)}}
     if(!m.face)m.face=DIRS8[m.dir];
     if(m.alert>0)m.alert--;if(m.sus>0)m.sus--;
+    if(m.sleep>0){
+      if(m.deepSleep){const p=G.player,d=cheb(m.x,m.y,p.x,p.y),l=playerLightLevel();
+        const stir=d<=1?0.06+0.12*Math.min(1,l):d<=3&&los(m.x,m.y,p.x,p.y)?0.03*Math.min(1,l):0;
+        if(stir&&h01(P.seed,G.turn,m.id,71)<stir)wake(m)}
+      else if(--m.sleep<=0)wake(m);
+      continue}
     if(m.para>0){m.para--;continue}
     if(m.frozen>0){m.frozen--;continue}
     if(m.stuck>0){m.stuck--;continue}
@@ -1055,11 +1077,11 @@ function rayPath(range,stopAtEnt){
   }
   return {path,hit};
 }
-const STAFF_KIND={fireStaff:'fire',iceStaff:'ice',boltStaff:'bolt',galeStaff:'gale'};
+const STAFF_KIND={fireStaff:'fire',iceStaff:'ice',boltStaff:'bolt',galeStaff:'gale',sleepStaff:'sleep'};
 function zapStaff(it){if(it.charges<=0){say('Nothing happens. The staff is spent.','dim');return}it.charges--;zap(STAFF_KIND[it.kind])}
 function zap(kind){
   const {path,hit}=rayPath(12,kind!=='gale');
-  const col={fire:'#ff8a3d',ice:'#9fe8ff',bolt:'#fff27a',gale:'#e8eef5'}[kind],ch={fire:'*',ice:'+',bolt:'ϟ',gale:'≋'}[kind];
+  const col={fire:'#ff8a3d',ice:'#9fe8ff',bolt:'#fff27a',gale:'#e8eef5',sleep:'#8fa8ff'}[kind],ch={fire:'*',ice:'+',bolt:'ϟ',gale:'≋',sleep:'z'}[kind];
   path.forEach(([x,y],n)=>fxGlyph(x,y,ch,col,n*28,240));
   if(kind==='gale')return gale(path);
   let touched=null;
@@ -1072,6 +1094,7 @@ function zap(kind){
     if(hit){if(hit.frozen)hit.frozen=0;if(!hit.fireImmune)hurt(hit,(7+Math.floor(G.rng()*4))*(hit.coldImmune?2:1),'zap');else say(`The ${hit.name} drinks the fire.`,'warn');ignite(idx(hit.x,hit.y))}}
   if(kind==='ice'){say('A blast of frost!','ice');
     if(hit){if(hit.coldImmune)say(`The ${hit.name} is unbothered by the cold.`,'warn');else{hit.frozen=5;say(`The ${hit.name} is frozen solid.`,'ice');hurt(hit,hit.trail?8:3,'zap')}}}
+  if(kind==='sleep'){say('A drowsy shimmer drifts forward…','dim');if(hit)sleepOn(hit,10);else say('It fades without touching anything.','dim')}
   if(kind==='bolt'){say('Thunder cracks!','zap');
     if(hit)hurt(hit,9+Math.floor(G.rng()*5),'zap');
     if(!touched&&hit&&[T_WATER,T_GRATE].includes(G.tile[idx(hit.x,hit.y)]))touched=[hit.x,hit.y];
@@ -1118,6 +1141,7 @@ function throwIt(it){
     return}
   if(hit){
     if(it.kind==='herb'){hit.hp=Math.min(hit.maxhp,hit.hp+25);say(`The ${hit.name} looks healthier. Oops.`,'warn');return}
+    if(it.kind==='tranq'){if(!sleepOn(hit,14))say(`The ${hit.name} brushes the dart off.`,'dim');return}
     if(it.kind==='tainted'){hit.para=6;hit.tx=null;hit.ty=null;say(`The ${hit.name} gulps down the jerky… and goes rigid! (paralyzed 6 turns)`,'good');fxGlyph(hit.x,hit.y,'≈','#c9a0ff',0,600);return}
     hurt(hit,it.kind==='weapon'?WEAPONS[it.w].atk+it.plus+2:2,'you');
   }
@@ -1156,6 +1180,8 @@ function useItem(k,bag){
         else if(t===T_ASH)G.tile[i]=T_MUD;
         else if((t===T_FLOOR||t===T_DIRT)&&h01(P.seed,G.turn,i,9)<0.5)G.tile[i]=T_WATER;
         G.gas[i]=0;G.pois[i]*=0.3;G.heat[i]=Math.min(G.heat[i],0.15);fxGlyph(x,y,'\'','#7fb8ff',h01(i,1,2,3)*300,250)});break;
+    case 'lullaby':{let n=0;for(const m of G.ents){if(m.dead||cheb(m.x,m.y,p.x,p.y)>6||!G.vis[idx(m.x,m.y)])continue;if(sleepOn(m,12))n++}
+      say(n?`A lullaby hums from the scroll. ${n} creature${n>1?'s':''} nod${n>1?'':'s'} off.`:'A lullaby hums from the scroll… but nothing nearby is listening.',n?'good':'dim');break}
     case 'reveal':G.lit=true;say('Golden light floods every corner of the floor. Nothing can hide from you here.','good');break;
     case 'storm':{G.storm={turns:40,area:stormArea()};G.flashT=performance.now();say(G.roomIdx[idx(p.x,p.y)]>=0?'Thunder rolls — a storm breaks over this room!':'Thunder rolls — a storm gathers overhead!','zap');break}
     case 'blizzard':say('A blizzard howls around you!','ice');
@@ -1313,13 +1339,16 @@ function render(now){
       else{cx.fillStyle=`rgba(255,170,90,${pulse.toFixed(2)})`;cx.fillText('×',px+TS/2,py+TS/2)}}}
   for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;
     if(m.silhouette)cx.globalAlpha=0.55;
-    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.para?'#c9a0ff':m.color,0.88,m.silhouette?0:TS*0.45);
+    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.para?'#c9a0ff':m.sleep?'#7f95c8':m.color,0.88,m.silhouette?0:TS*0.45);
     cx.globalAlpha=1;
     const px=ox+m.x*TS,py=oy+m.y*TS;
     if(m.para){cx.strokeStyle='#c9a0ff99';cx.setLineDash([3,3]);cx.strokeRect(px+TS*0.12,py+TS*0.08,TS*0.76,TS*0.84);cx.setLineDash([])}
     if(m.frozen){cx.strokeStyle='#9fe8ff88';cx.strokeRect(px+TS*0.12,py+TS*0.08,TS*0.76,TS*0.84)}
     if(m.panic){cx.font=`700 ${(TS*0.32).toFixed(1)}px ${FONT}`;cx.fillStyle='#ffe24a';cx.fillText('!',px+TS*0.85,py+TS*0.18)}
-    if(m.face){const [fx,fy]=m.face,col=m.alert>0?'#ff5a4a':m.sus>0?'#ffe24a':'#aab4c2';
+    if(m.sleep){const ph=(performance.now()/700+m.id*0.37)%1;cx.font=`700 ${(TS*(0.24+0.12*ph)).toFixed(1)}px ${FONT}`;
+      cx.fillStyle=`rgba(143,168,255,${(1-ph*0.7).toFixed(2)})`;cx.fillText('z',px+TS*(0.72+0.12*ph),py+TS*(0.3-0.22*ph));
+      cx.font=`700 ${(TS*0.22).toFixed(1)}px ${FONT}`;cx.fillStyle='#8fa8ff';cx.fillText('z',px+TS*0.62,py+TS*0.34)}
+    else if(m.face){const [fx,fy]=m.face,col=m.alert>0?'#ff5a4a':m.sus>0?'#ffe24a':'#aab4c2';
       cx.font=`700 ${(TS*0.36).toFixed(1)}px ${FONT}`;cx.fillStyle=col;cx.fillText(ARROWS[fx+','+fy],px+TS*(0.5+fx*0.44),py+TS*(0.5+fy*0.44));
       cx.font=`700 ${(TS*0.3).toFixed(1)}px ${FONT}`;if(m.alert>0){cx.fillStyle='#ff5a4a';cx.fillText('!',px+TS*0.15,py+TS*0.16)}else if(m.sus>0){cx.fillStyle='#ffe24a';cx.fillText('?',px+TS*0.15,py+TS*0.16)}else{cx.fillStyle='#6b7787';cx.fillText('z',px+TS*0.15,py+TS*0.16)}}
     if(m.hp<m.maxhp){cx.fillStyle='#2a0d0d';cx.fillRect(px+TS*0.15,py+TS*0.9,TS*0.7,TS*0.07);cx.fillStyle='#ff6a5a';cx.fillRect(px+TS*0.15,py+TS*0.9,TS*0.7*clamp(m.hp/m.maxhp,0,1),TS*0.07)}
@@ -1456,6 +1485,7 @@ function zapPreview(kind,path,hit){
   if(kind==='fire'){const f=n([T_GRASS,T_OIL,T_VINE,T_TREE,T_SLICK]);if(f)bits.push(`ignites ${f} tile${f>1?'s':''} on the way`);const m=n([T_ICE,T_SNOW]);if(m)bits.push(`melts ${m}`)}
   if(kind==='ice'){const w=n([T_WATER]);if(w)bits.push(`freezes ${w} water tile${w>1?'s':''} into ice`);const f=n([T_FIRE]);if(f)bits.push(`puts out ${f} fire${f>1?'s':''}`);const o=n([T_OIL]);if(o)bits.push(`turns ${o} oil to slick ice`)}
   if(kind==='bolt'){if(n([T_WATER,T_GRATE])||(hit&&[T_WATER,T_GRATE].includes(G.tile[idx(hit.x,hit.y)])))bits.push('<b style="color:#ffe24a">touches water or metal — it will electrify all of it</b>')}
+  if(kind==='sleep'){if(hit)bits.push(`puts the ${hit.name} to sleep for 10 turns`);else bits.push('hits nothing')}
   if(kind==='gale'){const e=path.map(([x,y])=>entAt(x,y)).find(Boolean);if(e)bits.push(`hurls the ${e.name} back`);const f=n([T_FIRE]);if(f)bits.push(`pushes ${f} fire${f>1?'s':''} forward`)}
   return bits.length?' It '+bits.join(', ')+'.':''}
 function openAim(it,onFire,back){
@@ -1740,7 +1770,7 @@ MON.rat.desc='Scurries about; only fights when you come close.';MON.goblin.desc=
 MON.slime.desc='Splits in two when hit. Heals and multiplies in water.';MON.ember.desc='Leaves fire wherever it walks through grass or oil. Drawn to fireflies; water hurts it.';
 MON.toad.desc='Belches clouds of poison gas. Immune to poison.';MON.thief.desc='Steals an item and flees at double speed. Drops loot if it runs through fire.';
 MON.ogre.desc='Slow but brutal. Panics near fire and tramples anything in its way.';MON.wraith.desc='Freezes the ground it walks on. Immune to cold, takes double damage from fire.';
-function traits(m){const t=[];if(m.para)t.push(`paralyzed ${m.para}t`);if(m.fireImmune)t.push('fire-immune');if(m.poisonImmune)t.push('poison-immune');if(m.coldImmune)t.push('cold-immune');if(m.slow)t.push('slow');
+function traits(m){const t=[];if(m.sleep)t.push(m.deepSleep?'asleep — noise may wake it':`magically asleep ${m.sleep}t`);if(m.para)t.push(`paralyzed ${m.para}t`);if(m.fireImmune)t.push('fire-immune');if(m.poisonImmune)t.push('poison-immune');if(m.coldImmune)t.push('cold-immune');if(m.slow)t.push('slow');
   if(m.frozen)t.push(`frozen ${m.frozen}t`);if(m.stuck)t.push('stuck in mud');if(m.panic)t.push('panicking');if(m.fleeing)t.push('fleeing');if(m.carry)t.push(`carrying your ${itemName(m.carry)}`);
   return t}
 function awareness(m){const f=m.face?ARROWS[m.face.join(',')]:'?';

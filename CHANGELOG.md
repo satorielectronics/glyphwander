@@ -4,6 +4,11 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.10.2 — Keyboard: L for LOOK, vim movement removed
+- LOOK is now on `L` (`V` still works).
+- Removed the vim movement keys (h j k l y u b n) everywhere, including menus, so those
+  letters are free for actions. Move with the arrow keys or the numpad (7 9 1 3 diagonals).
+
 ## v0.10.1 — Thrown items draw attention
 - Every creature that hears a thrown item land turns to face the spot. Unaware ones investigate;
   alerted ones glance over, and go to check it if they've lost sight of you.

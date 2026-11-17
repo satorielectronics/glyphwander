@@ -4,6 +4,12 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.11.5 — Left-hand keys
+- Map: Q = LOOK, W = TORCH, D = STAIRS (L, T and > still work).
+- Item screens (pack, bag view, aim screen, split / read / put choosers): options are lettered
+  by position — Q W E, A S D, then R F Z V — so your left hand never moves. X = BACK, C = CLOSE.
+  Arrows still select items and buttons; Enter still confirms.
+
 ## v0.11.4 — Explosion smoke fix, Tab for items, M for map
 - Fix: an explosion in an already smoky fire could push the smoke past the see-through limit,
   hiding the area behind it for a turn (and blocking the fire's light). A blast now adds a

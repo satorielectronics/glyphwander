@@ -1259,11 +1259,19 @@ function closeModal(){$('#modal').hidden=true;G.aimPreview=false;G.aimSpec=null;
 function openModal(html,cls){$('#sheet').innerHTML=html;const m=$('#modal');m.className='modal'+(cls?' '+cls:'');m.hidden=false;$('#sheet').scrollTop=0;kbAfterRender()}
 $('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal'&&!G.over)closeModal()});
 const OPKEYS={zap:'z',save:'s',load:'l',del:'x',export:'e',import:'i',copy:'c',go:'↵',merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
-function bindOps(map){$('#sheet').querySelectorAll('[data-op]').forEach(b=>{b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)};
-  const k=OPKEYS[b.dataset.op];if(k&&b.tagName==='BUTTON'&&!b.dataset.key){b.dataset.key=k;b.insertAdjacentHTML('afterbegin',`<span class="kh">${k.toUpperCase()}</span>`)}});kbAfterRender()}
+// Item screens use left-hand keys by position: the options in order are Q W E A S D R F Z V, BACK is X, CLOSE is C.
+const POSKEYS=['q','w','e','a','s','d','r','f','z','v'];
+function bindOps(map,positional){const sheet=$('#sheet');
+  sheet.querySelectorAll('[data-op]').forEach(b=>{b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)}});
+  const tag=(el,k)=>{el.dataset.key=k;el.insertAdjacentHTML('afterbegin',`<span class="kh">${k.toUpperCase()}</span>`)};
+  if(positional){let n=0;
+    const opts=[...sheet.querySelectorAll('.row[data-op^="c"]'),...sheet.querySelectorAll('.btns button[data-op]')];
+    for(const el of opts){const op=el.dataset.op;if(op==='close')tag(el,'c');else if(op==='back')tag(el,'x');else if(n<POSKEYS.length)tag(el,POSKEYS[n++])}}
+  else sheet.querySelectorAll('[data-op]').forEach(b=>{const k=OPKEYS[b.dataset.op];if(k&&b.tagName==='BUTTON'&&!b.dataset.key)tag(b,k)});
+  kbAfterRender()}
 function choose(title,opts,back){
   openModal(`<h3>${title}</h3>`+opts.map((o,k)=>`<div class="row" tabindex="-1" data-op="c${k}"><span class="g" style="color:${o.color||'#cfd6e0'}">${o.ch||'›'}</span>${o.label}</div>`).join('')+`<div class="btns"><button data-op="back">BACK</button></div>`);
-  const map={back:back||(()=>openInv())};opts.forEach((o,k)=>map['c'+k]=o.fn);bindOps(map);
+  const map={back:back||(()=>openInv())};opts.forEach((o,k)=>map['c'+k]=o.fn);bindOps(map,true);
 }
 
 // ---------------- cooking ----------------
@@ -1322,7 +1330,7 @@ function openAim(it,onFire,back){
   map.dm=()=>{G.throwDist=Math.max(1,throwDist()-1);openAim(it,onFire,back)};
   map.dp=()=>{G.throwDist=Math.min(THROW_MAX,throwDist()+1);openAim(it,onFire,back)};
   map.dmax=()=>{G.throwDist=THROW_MAX;openAim(it,onFire,back)};
-  bindOps(map);
+  bindOps(map,true);
 }
 
 // ---------------- inventory with bags ----------------
@@ -1373,7 +1381,7 @@ function openInv(){
       act(()=>useItem(invSel))},
   };
   inv.forEach((x,k)=>map['r'+k]=()=>{invSel=k;openInv()});
-  bindOps(map);
+  bindOps(map,true);
 }
 function bagRoomFor(b,it){return b.items.length<ITEMS[b.kind].bag||(STACK[it.kind]&&b.items.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))}
 function putIn(it,bag){const p=G.player,bn=ITEMS[bag.kind].name,name=itemName(it),before=qty(it);
@@ -1404,7 +1412,7 @@ function openBagView(){
     throw:()=>openAim(it,()=>{const k=b.items.indexOf(it);if(k<0)return;const one=takeOne(b.items,k);say(`You pull the ${itemName(one)} from the ${bd.name}…`,'dim');throwIt(one)},openBagView),
     cook:()=>act(()=>cookItems([it]))};
   items.forEach((x,k)=>map['r'+k]=()=>{bagSel=k;openBagView()});
-  bindOps(map);
+  bindOps(map,true);
 }
 
 // ---------------- blacksmith ----------------
@@ -1754,6 +1762,7 @@ function modalKey(e){
   if(k==='Escape'){e.preventDefault();if(G.over)return;const b=sheet.querySelector('[data-op="back"]')||sheet.querySelector('#pc')||sheet.querySelector('[data-op="close"]');if(b)b.click();else closeModal();return}
   // aim screen: direction keys turn you, Enter throws, 1-9 picks a target
   if(sheet.querySelector('.aimgrid')){
+    if(/^[a-z]$/i.test(k)&&!e.ctrlKey&&!e.metaKey){const hk=sheet.querySelector(`[data-key="${k.toLowerCase()}"]:not(:disabled)`);if(hk){e.preventDefault();hk.click()}return}
     // Shift+←/→ (and Shift+numpad 4/6) set the throw distance. With NumLock on, Shift+numpad 4/6 arrives as an arrow key,
     // sometimes without shiftKey, so a numpad arrow while NumLock is on counts as shifted too.
     const numLR=e.code==='Numpad4'||e.code==='Numpad6',numLock=e.getModifierState&&e.getModifierState('NumLock');
@@ -1767,7 +1776,7 @@ function modalKey(e){
   // Tab toggles the pack: in the pack or a bag view it closes it
   if(k==='Tab'&&!e.shiftKey&&!typing&&(sheet.querySelector('.selrow')&&/^PACK/.test(kbScreen())||invBag)){e.preventDefault();invBag=null;closeModal();return}
   // letter hotkeys on buttons
-  if(k.length===1&&!typing&&!e.ctrlKey&&!e.metaKey){const hk=sheet.querySelector(`button[data-key="${k.toLowerCase()}"]:not(:disabled)`);if(hk){e.preventDefault();hk.click();return}}
+  if(k.length===1&&!typing&&!e.ctrlKey&&!e.metaKey){const hk=sheet.querySelector(`[data-key="${k.toLowerCase()}"]:not(:disabled)`);if(hk){e.preventDefault();hk.click();return}}
   // lists with a selection (pack, bags): up/down select, left/right pick a button, Enter does it
   const rows=[...sheet.querySelectorAll('.selrow')];
   if(rows.length){
@@ -1788,9 +1797,9 @@ function modalKey(e){
 }
 function openHelp(){
   const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals)'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
-    ['Items (pack)','Tab or I (Tab again closes) — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · Z zap (in a bag) · S split · M combine · C cook · A cook all · B build fire'],
-    ['Aim a throw or zap','direction keys turn, Shift+← → (or Shift+numpad 4 / 6, or − +) set throw distance, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
-    ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','M (Esc closes the big map)'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
+    ['Items (pack)','Tab or I (Tab again closes) — ↑↓ select an item, then Q W E A S D… pick its options in order, X back, C close'],['Item screens','the buttons are lettered in order Q W E / A S D / R F Z V — your left hand never moves; X is BACK, C is CLOSE'],
+    ['Aim a throw or zap','direction keys turn, Shift+← → (or Shift+numpad 4 / 6, or − +) set throw distance, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','Q (or L) — move the cursor, . cycles targets, F faces the target'],
+    ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','W (or T)'],['Stairs','D (or > / Enter)'],['Map','M (Esc closes the big map)'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
     ['Sandbox','X toggle · B brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
   openModal(`<h3>KEYBOARD</h3>`+L.map(([a,b])=>`<div class="prm" style="grid-template-columns:150px 1fr"><b style="color:#fff">${a}</b><span style="text-align:left;color:#9aa6b6">${b}</span></div>`).join('')+`<div class="btns"><button data-op="close">CLOSE</button></div>`);
   bindOps({close:closeModal})}
@@ -1852,7 +1861,7 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Numpad0'||(e.key==='0'&&e.location===3)){e.preventDefault();if(!SB)doAction('explore');return}
   const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
   if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])&&!lookMode){G.player.face=[d[0],d[1]];updateHUD();return}dirInput(d[0],d[1]);return}
-  if(key==='l'||key==='v'){doAction('look');return}if(key==='k'){doAction('save');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
+  if(key==='q'||key==='l'||key==='v'){doAction('look');return}if(key==='w'){doAction('torch');return}if(key==='d'){e.preventDefault();doAction('stairs');return}if(key==='k'){doAction('save');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
   if(key==='f'){doAction('face');return}
   stopExplore();if(lookMode)exitLook();
   if(e.key==='Tab'){e.preventDefault();openInv();return}

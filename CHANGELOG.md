@@ -4,6 +4,12 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.11.2 — Choose how far to throw
+- The throw aim screen has a Distance control (1–10, − / + buttons or keys, MAX). The map line,
+  the × landing marker and the description follow it, and the item lands exactly there unless
+  something stops it first. Picking a quick-aim target stretches the throw to reach it.
+  The distance is remembered between throws.
+
 ## v0.11.1 — Aimed zaps, zapping from bags, numpad 0 explores
 - Zapping a staff now opens the aim screen first, like throwing: pick a direction, see the real
   path (12 tiles; gale passes through creatures) and a preview of the effect — who it hits,

@@ -52,6 +52,12 @@ canvas{touch-action:none}
 .aim{display:flex;gap:12px;align-items:center}
 .aimgrid{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px);gap:4px;flex:none}
 .aimgrid button{font-size:17px}
+.dist{display:flex;align-items:center;gap:8px;margin:10px 0 2px;font-size:12px}
+.dist button{width:40px;height:36px;font-size:16px}
+.dist button[data-op=dmax]{width:auto;padding:0 10px;font-size:11px}
+.dist b{min-width:18px;text-align:center;color:#fff;font-size:15px}
+.kh2{display:none;margin-left:auto}
+@media (hover:hover) and (pointer:fine){.kh2{display:inline}}
 .aimgrid span{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
 .sheet{background:#0b0f15;border:1px solid #243041;border-bottom:none;border-radius:14px 14px 0 0;width:100%;max-width:640px;max-height:82dvh;overflow:auto;padding:14px 14px 20px;box-sizing:border-box}
 .sheet h3{margin:0 0 10px;font-size:13px;letter-spacing:.14em;color:#ff8a3d}

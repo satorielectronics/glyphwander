@@ -944,7 +944,7 @@ function throwItem(k){return throwIt(takeOne(G.player.inv,k))}
 function throwIt(it){
   const p=G.player,d=ITEMS[it.kind];
   if(it===p.weapon)p.weapon=null;
-  const {path,hit}=rayPath(10,true);
+  const {path,hit}=rayPath(throwDist(),true);
   path.forEach(([x,y],n)=>fxGlyph(x,y,d.ch,d.color,n*30,90));
   const [lx,ly]=path.length?path[path.length-1]:[p.x,p.y];
   say(`You throw the ${d.name}.`);
@@ -1279,7 +1279,9 @@ function cookHint(it){if(!COOKS[it.kind])return '';return cookSource()?` <span s
 
 // ---------------- aiming (confirm direction before a throw) ----------------
 // Aim screen for throws and zaps: pick a direction, see exactly where it goes and what it will do, then confirm.
-function aimSpec(it){if(ITEMS[it.kind].staff){const k=STAFF_KIND[it.kind];return {zap:k,range:12,stop:k!=='gale'}}return {zap:null,range:10,stop:true}}
+const THROW_MAX=10;
+function throwDist(){return clamp(G.throwDist||THROW_MAX,1,THROW_MAX)}
+function aimSpec(it){if(ITEMS[it.kind].staff){const k=STAFF_KIND[it.kind];return {zap:k,range:12,stop:k!=='gale'}}return {zap:null,range:throwDist(),stop:true}}
 function zapPreview(kind,path,hit){
   const n=t=>path.filter(([x,y])=>t.includes(G.tile[idx(x,y)])).length,bits=[];
   if(kind==='fire'){const f=n([T_GRASS,T_OIL,T_VINE,T_TREE,T_SLICK]);if(f)bits.push(`ignites ${f} tile${f>1?'s':''} on the way`);const m=n([T_ICE,T_SNOW]);if(m)bits.push(`melts ${m}`)}
@@ -1299,23 +1301,27 @@ function openAim(it,onFire,back){
     else info='<span style="color:#f0c060">Blocked right in front of you.</span>';
   }else{
     if(hit)info=`<b style="color:#ff6a5a">Will hit the ${hit.name}</b> ${path.length} tile${path.length>1?'s':''} away.`;
-    else if(path.length){const [lx,ly]=path[path.length-1],t=G.tile[idx(lx,ly)];info=`Nothing in the way. It lands ${path.length} tile${path.length>1?'s':''} away on ${TNAME[t]}${t===T_WATER&&!isBag(it)&&!['oilJar','miasma','seeds'].includes(it.kind)?' — and sinks':t===T_FIRE?' — right into the fire':''}.`}
+    else if(path.length){const [lx,ly]=path[path.length-1],t=G.tile[idx(lx,ly)];info=`${path.length<throwDist()?'Something stops it early — it':'It'} lands ${path.length} tile${path.length>1?'s':''} away on ${TNAME[t]}${t===T_WATER&&!isBag(it)&&!['oilJar','miasma','seeds'].includes(it.kind)?' — and sinks':t===T_FIRE?' — right into the fire':''}.`}
     else info='<span style="color:#f0c060">Blocked right in front of you — it will drop at your feet.</span>';
   }
   // quick-aim: visible monsters that this throw or zap would actually reach
   const quick=[],saved=p.face;
   for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;const dx=m.x-p.x,dy=m.y-p.y;if(!(dx===0||dy===0||Math.abs(dx)===Math.abs(dy)))continue;
-    p.face=[sgn(dx),sgn(dy)];const r=rayPath(spec.range,true);if(r.hit===m)quick.push([p.face,m])}
+    p.face=[sgn(dx),sgn(dy)];const r=rayPath(spec.zap?spec.range:THROW_MAX,true);if(r.hit===m)quick.push([p.face,m,cheb(m.x,m.y,p.x,p.y)])}
   p.face=saved;
   const cur=p.face.join(','),verb=spec.zap?'ZAP':'THROW';
   openModal(`<h3>${verb} ${(spec.zap?itemName(it):qty(it)>1?'1 '+ITEMS[it.kind].name:itemName(it)).toUpperCase()} — AIM</h3>
     <div class="aim"><div class="aimgrid">${DG.map((d,k)=>d?`<button data-op="d${k}" class="${d.join(',')===cur?'on':''}">${ARROWS[d.join(',')]}</button>`:'<span>@</span>').join('')}</div>
     <div class="desc" style="margin:0;flex:1">Facing <b style="color:#ff8a3d">${ARROWS[cur]}</b>. ${info}<br><span class="dim">Check the line on the map, then confirm.</span></div></div>
+    ${spec.zap?'':`<div class="dist"><span class="dim">Distance</span><button data-op="dm" ${throwDist()<=1?'disabled':''}>−</button><b>${throwDist()}</b><span class="dim">/ ${THROW_MAX}</span><button data-op="dp" ${throwDist()>=THROW_MAX?'disabled':''}>+</button><button data-op="dmax" ${throwDist()>=THROW_MAX?'disabled':''}>MAX</button><span class="dim kh2">− / + keys</span></div>`}
     ${quick.length?`<div class="chips">${quick.map(([f,m],k)=>`<button class="chip" data-op="q${k}" style="color:${m.color}">${k+1} · ${ARROWS[f.join(',')]} ${m.name}</button>`).join('')}</div>`:''}
     <div class="btns"><button data-op="fire" class="on">${verb} ${ARROWS[cur]}</button><button data-op="back">BACK</button></div>`,'clear');
   const map={fire:()=>{closeModal();G.aimSpec=null;onFire();endTurn()},back:()=>{G.aimPreview=true;back()}};
   DG.forEach((d,k)=>{if(d)map['d'+k]=()=>{p.face=d;updateHUD();openAim(it,onFire,back)}});
-  quick.forEach(([f],k)=>map['q'+k]=()=>{p.face=f;updateHUD();openAim(it,onFire,back)});
+  quick.forEach(([f,,d],k)=>map['q'+k]=()=>{p.face=f;if(!spec.zap&&throwDist()<d)G.throwDist=d;updateHUD();openAim(it,onFire,back)});
+  map.dm=()=>{G.throwDist=Math.max(1,throwDist()-1);openAim(it,onFire,back)};
+  map.dp=()=>{G.throwDist=Math.min(THROW_MAX,throwDist()+1);openAim(it,onFire,back)};
+  map.dmax=()=>{G.throwDist=THROW_MAX;openAim(it,onFire,back)};
   bindOps(map);
 }
 
@@ -1748,6 +1754,8 @@ function modalKey(e){
   if(k==='Escape'){e.preventDefault();if(G.over)return;const b=sheet.querySelector('[data-op="back"]')||sheet.querySelector('#pc')||sheet.querySelector('[data-op="close"]');if(b)b.click();else closeModal();return}
   // aim screen: direction keys turn you, Enter throws, 1-9 picks a target
   if(sheet.querySelector('.aimgrid')){
+    if(k==='-'||k==='_'){e.preventDefault();const b=sheet.querySelector('[data-op="dm"]:not(:disabled)');if(b)b.click();return}
+    if(k==='+'||k==='='){e.preventDefault();const b=sheet.querySelector('[data-op="dp"]:not(:disabled)');if(b)b.click();return}
     if(/^[1-9]$/.test(k)&&!e.code.startsWith('Numpad')){const q=sheet.querySelector(`[data-op="q${+k-1}"]`);if(q){e.preventDefault();q.click()}return}
     const d=keyDir(e);if(d&&(d[0]||d[1])){e.preventDefault();const b=sheet.querySelector(`[data-op="d${(d[1]+1)*3+d[0]+1}"]`);if(b)b.click();return}
     if(k==='Enter'||(d&&!d[0]&&!d[1])){e.preventDefault();sheet.querySelector('[data-op="fire"]').click()}return}
@@ -1774,7 +1782,7 @@ function modalKey(e){
 function openHelp(){
   const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals)'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
     ['Items (pack)','I — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · Z zap (in a bag) · S split · M combine · C cook · A cook all · B build fire'],
-    ['Aim a throw or zap','direction keys turn, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
+    ['Aim a throw or zap','direction keys turn, − / + set throw distance, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
     ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
     ['Sandbox','X toggle · M brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
   openModal(`<h3>KEYBOARD</h3>`+L.map(([a,b])=>`<div class="prm" style="grid-template-columns:150px 1fr"><b style="color:#fff">${a}</b><span style="text-align:left;color:#9aa6b6">${b}</span></div>`).join('')+`<div class="btns"><button data-op="close">CLOSE</button></div>`);

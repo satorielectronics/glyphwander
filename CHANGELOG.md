@@ -4,6 +4,10 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.15.1 — Fewer boulders
+- Boulders spawn far less often: about 1 in 6 rooms gets 1–2 (was up to a dozen in 2 of 5 rooms, because of a missing cap).
+  Trees are unchanged.
+
 ## v0.15.0 — Sleep
 - About 30% of monsters start a floor asleep (shown blue with a drifting z, no facing arrow). They never notice you,
   but a noise close by wakes them, and they may stir if you linger next to them — more likely with your torch lit.

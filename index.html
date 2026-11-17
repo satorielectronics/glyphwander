@@ -421,6 +421,12 @@ function campMenu(ci){
   opts.push({label:L?`Add lumber (+60 fuel → ${fuel+60})`:'Add lumber — you have none',ch:'=',color:'#c08a50',fn:()=>{
     if(!findItem('lumber')){say('You have no lumber.','dim');return campMenu(ci)}
     act(()=>{removeFound(findItem('lumber'));G.fuel[ci]=Math.min(9999,G.fuel[ci]+60);say(`You add lumber to the ${lit?'campfire':'fire pit'}. (${G.fuel[ci]} turns of fuel)`,lit?'fire':'')})}});
+  const back=Math.floor(fuel/60);
+  opts.push({label:`Dismantle it — clears the spot so you can walk through${back?` (recover ${back} lumber)`:''}`,ch:'x',color:'#9aa0a8',fn:()=>act(()=>{
+    const x=ci%W,y=(ci/W)|0;G.tile[ci]=T_ASH;G.fuel[ci]=0;G.heat[ci]=Math.min(G.heat[ci],lit?0.5:0.2);if(lit)G.gas[ci]=Math.min(1,G.gas[ci]+0.3);noise(x,y,3);
+    let msg=lit?'You kick the campfire apart and stamp out the embers.':'You pull the fire pit apart.';
+    if(back){const L=mkItem('lumber');L.n=back;if(addToPack(L))msg+=` You recover ${back} lumber.`;else{placeFloor(x,y,L);msg+=` Your pack is full — the lumber is left on the ground.`}}
+    say(msg+' The way is clear.','dim');fxGlyph(x,y,'x','#9aa0a8',0,400)})});
   choose(lit?`CAMPFIRE · ${fuel} TURNS OF FUEL`:`FIRE PIT (OUT) · ${fuel} TURNS OF FUEL`,opts,closeModal);
 }
 function nextToCamp(){const p=G.player;for(const [dx,dy] of DIRS8){const x=p.x+dx,y=p.y+dy;if(inb(x,y)&&G.tile[idx(x,y)]===T_CAMP)return true}return false}

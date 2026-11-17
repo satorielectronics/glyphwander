@@ -4,6 +4,11 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.13.1 — Dismantle campfires
+- Campfire and fire-pit menus have a Dismantle option: the spot becomes ash you can walk through.
+  You get back 1 lumber for every 60 turns of fuel left (dropped on the ground if your pack is full).
+  Kicking apart a lit fire leaves a little smoke and makes noise.
+
 ## v0.13.0 — Item hotkeys on the number row
 - The numpad and the number row now act separately. The numpad (read by physical key) moves, waits (5) and
   auto-explores (0); with NumLock off, Home/End/PgUp/PgDn/Clear still move. The number row never moves you.

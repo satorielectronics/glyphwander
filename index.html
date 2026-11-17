@@ -12,6 +12,9 @@ html,body{margin:0;height:100%;background:#06080b;color:#cfd6e0;font-family:"Jet
 #hud{display:flex;gap:10px;align-items:center;padding:8px 10px 6px;font-size:12px;border-bottom:1px solid #141a23;flex-wrap:wrap}
 #hud .t{color:#ff8a3d;font-weight:700;letter-spacing:.12em}
 #hud b{color:#fff;font-weight:700}
+.hb{display:inline-flex;align-items:center;gap:3px;padding:1px 6px 1px 2px;border:1px solid #243041;border-radius:5px;color:#cfd6e0;font-size:11px}
+.hb i{font-style:normal;background:#ff8a3d;color:#06080b;border-radius:3px;padding:0 4px;font-weight:700;font-size:10px}
+.hb.off{opacity:.4}
 .bar{display:inline-block;width:56px;height:6px;background:#1a222d;border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:4px}
 .bar i{display:block;height:100%;background:#7fe07f}
 #view{position:relative;flex:1;min-height:0}
@@ -1365,7 +1368,7 @@ function updateHUD(){
   $('#hud').innerHTML=`<span class="t">GLYPHWANDER</span><span><b>B${G.depth}F</b>${G.night?' ☾':''}${G.lit?' ☀':''}${G.storm?` <span style="color:#8fb0ff">⛈${G.storm.turns}</span>`:''}</span><span>Lv<b>${p.lv}</b></span>`+
     `<span>HP <b>${p.hp}</b>/${p.maxhp}<span class="bar"><i style="width:${hpPct}%;background:${hpPct<30?'#ff6a5a':'#7fe07f'}"></i></span></span>`+
     `<span>Full <b style="color:${p.full<=20?'#f0c060':'#fff'}">${p.full}%</b></span>`+
-    `${stealthTag()}<span>⚔ <b>${p.weapon?itemName(p.weapon):'fists'}</b> <span class="dim">(${atkOf(p)})</span></span><span style="color:#ffd84a">$${p.gold}</span>`+
+    `${stealthTag()}${hotbarHTML()}<span>⚔ <b>${p.weapon?itemName(p.weapon):'fists'}</b> <span class="dim">(${atkOf(p)})</span></span><span style="color:#ffd84a">$${p.gold}</span>`+
     `<span class="dim">T${G.turn} · wind ${wa} · ${TNAME[t]} · ${Math.round(G.heat[i]*100)}°</span>`;
 }
 function renderLog(){const el=$('#log');if(!el)return;el.innerHTML=G.log.slice(-4).map((l,k,a)=>`<div class="${l.cls}" style="opacity:${0.45+0.55*(k+1)/a.length}">${l.msg}</div>`).join('')}
@@ -1858,6 +1861,39 @@ function openImport(){
   openModal(`<h3>IMPORT CODE</h3><div class="desc">Paste a code that starts with GW1: and load it. Your current run will be replaced.</div><textarea id="codeIn" rows="6" style="width:100%;box-sizing:border-box;font:11px monospace;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:6px" placeholder="GW1:…"></textarea><div class="btns"><button data-op="go">LOAD CODE</button><button data-op="back">BACK</button></div>`);
   bindOps({back:openSaves,go:()=>{try{fromCode($('#codeIn').value);say(`Code loaded: B${G.depth}F, turn ${G.turn}.`,'good')}catch(e){say('That code could not be loaded: '+e.message,'bad')}}})}
 
+// ---------------- ITEM HOTKEYS (number row) ----------------
+// A bind remembers an item by kind (and weapon type), so it keeps working as stacks change, charges run out
+// or the item moves between your pack and bags. Binds are kept in this browser across runs.
+let BINDS={};try{BINDS=JSON.parse(localStorage.getItem('glyphwander-binds')||'{}')||{}}catch(e){}
+function saveBinds(){try{localStorage.setItem('glyphwander-binds',JSON.stringify(BINDS))}catch(e){}}
+const bindMatch=(it,b)=>it.kind===b.kind&&(b.kind!=='weapon'||it.w===b.w);
+const bindName=b=>b.kind==='weapon'?WEAPONS[b.w].name:ITEMS[b.kind].name;
+function findBound(b){const p=G.player;let k=p.inv.findIndex(x=>bindMatch(x,b));if(k>=0)return {list:p.inv,k,bag:null};
+  for(const bag of p.inv)if(isBag(bag)){k=bag.items.findIndex(x=>bindMatch(x,b));if(k>=0)return {list:bag.items,k,bag}}return null}
+function bindLabel(b){const p=G.player;let n=0,ch=null;const all=[];for(const it of p.inv){all.push(it);if(isBag(it))all.push(...it.items)}
+  for(const it of all)if(bindMatch(it,b)){n+=qty(it);if(it.charges!=null&&ch===null)ch=it.charges}
+  const name=bindName(b).replace(/^Staff of /,'').replace(/ Scroll$/,'').replace(/^Medicinal /,'');
+  return {name,count:ch!==null?`[${ch}]`:n>1?`×${n}`:'',have:n>0}}
+function setBind(d,b){if(b)BINDS[d]=b;else delete BINDS[d];saveBinds();updateHUD()}
+function bindSelected(d){const it=invBag?invBag.items[bagSel]:G.player.inv[invSel];if(!it)return;
+  const b={kind:it.kind};if(it.kind==='weapon')b.w=it.w;setBind(d,b);say(`${bindName(b)} bound to ${d}.`,'good');invBag?openBagView():openInv()}
+function useBind(d){
+  const b=BINDS[d];if(!b){say(`Nothing on ${d}. Select an item in your pack and press ${d}, or open the console (~) and type: bind ${d} fire staff.`,'dim');return}
+  if(G.over||paralyzed())return;stopExplore();if(lookMode)exitLook();
+  const f=findBound(b);if(!f){say(`You have no ${bindName(b)}.`,'dim');return}
+  const p=G.player,it=f.list[f.k],d0=ITEMS[it.kind];
+  if(d0.staff){openAim(it,()=>zapStaff(it),closeModal);return}
+  if(it.kind==='weapon'){if(f.bag){say(`Take the ${itemName(it)} out of the ${ITEMS[f.bag.kind].name} to equip it.`,'dim');return}p.weapon=p.weapon===it?null:it;say(p.weapon?`You equip the ${itemName(it)}.`:'You put your weapon away.');updateHUD();return}
+  if(isBag(it)){invBag=it;bagSel=0;openInv();return}
+  if(d0.use){let k=f.k;
+    if(f.bag){if(p.inv.length>=12&&!(STACK[it.kind]&&p.inv.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))){say('Your pack is full — make room to use it from the bag.','warn');return}
+      const one=takeOne(f.list,f.k);addToPack(one);k=p.inv.findIndex(x=>bindMatch(x,b))}
+    invBag=null;invSel=k;openInv();const u=$('#sheet [data-op="use"]');if(u)u.click();return}
+  openAim(it,()=>{const g=findBound(b);if(!g)return;throwIt(takeOne(g.list,g.k))},closeModal);
+}
+function hotbarHTML(){const keys=Object.keys(BINDS).sort((a,b)=>(a==='0'?10:+a)-(b==='0'?10:+b));if(!keys.length)return '';
+  return keys.map(d=>{const l=bindLabel(BINDS[d]);return `<span class="hb${l.have?'':' off'}"><i>${d}</i>${l.name}${l.count?' '+l.count:''}</span>`}).join('')}
+
 // ---------------- CONSOLE (~) ----------------
 let conOpen=false;const conHist=[];let conHi=0;
 const esc=t=>String(t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -1887,6 +1923,8 @@ const CMDS={
   help:()=>['spawn <monster|item> [count] — place near you (e.g. spawn goblin 3, spawn katana +2 fire, spawn lumber 20)',
     'give <item> [count] — straight into your pack (overflow drops at your feet)',
     'gold <n> · heal · god (toggle no damage) · reveal · floor <n> · kill (everything in view)',
+    'bind <0-9> <item> — number-row hotkey (staff: aim & zap · food/scroll: use · jar: aim & throw · weapon: equip)',
+    'unbind <0-9|all> · binds — list them',
     'list monsters | items | weapons · clear · help'].forEach(l=>conPrint(l)),
   list:a=>{const w=(a[0]||'').toLowerCase();if(w.startsWith('m'))conPrint(Object.keys(conMonsters()).join(', '));else if(w.startsWith('w'))conPrint(Object.keys(WEAPONS).join(', ')+'  (seals: '+Object.values(SEALS).map(s=>s.name).join(', ')+')');else conPrint(Object.keys(ITEMS).filter(k=>k!=='weapon').join(', '))},
   clear:()=>{$('#conOut').innerHTML=''},
@@ -1903,6 +1941,14 @@ const CMDS={
     const amb=[mon,it].filter(Array.isArray).flat();
     conPrint(amb.length?`"${q}" could be: ${amb.slice(0,12).join(', ')}`:`nothing called "${q}" — try list monsters / list items`,'bad')},
   give:a=>CMDS.spawn(a,true),
+  bind:a=>{const d=a[0];if(!/^[0-9]$/.test(d||''))return conPrint('usage: bind <0-9> <item>   e.g. bind 1 fire staff','bad');
+    if(a.length<2){const b=BINDS[d];return conPrint(b?`${d} = ${bindName(b)}`:`nothing on ${d}`)}
+    const q=a.slice(1).join(' '),r=resolveName(q,conItems());
+    if(typeof r!=='string')return conPrint(Array.isArray(r)?`"${q}" could be: ${r.slice(0,12).join(', ')}`:`no item called "${q}" — try list items`,'bad');
+    const b=r.startsWith('w:')?{kind:'weapon',w:r.slice(2)}:{kind:r};setBind(d,b);conPrint(`${d} = ${bindName(b)}`,'good')},
+  unbind:a=>{const d=(a[0]||'').toLowerCase();if(d==='all'){BINDS={};saveBinds();updateHUD();return conPrint('all binds cleared','good')}
+    if(!/^[0-9]$/.test(d))return conPrint('usage: unbind <0-9|all>','bad');setBind(d,null);conPrint(`${d} cleared`,'good')},
+  binds:()=>{const k=Object.keys(BINDS).sort();if(!k.length)return conPrint('no binds yet — bind <0-9> <item>');k.forEach(d=>conPrint(`${d} = ${bindName(BINDS[d])}`))},
   gold:a=>{const n=parseInt(a[0]||'100',10)||0;G.player.gold+=n;G.cheated=true;conPrint(`+${n} gold (now ${G.player.gold})`,'good')},
   heal:()=>{const p=G.player;p.hp=p.maxhp;p.full=100;p.para=0;p.stuck=0;G.cheated=true;conPrint('healed and fed','good')},
   god:()=>{G.god=!G.god;G.cheated=true;conPrint(`god mode ${G.god?'ON — you take no damage':'off'}`,'good')},
@@ -1917,7 +1963,7 @@ function runConsole(line){line=line.trim();if(!line)return;conHist.push(line);co
   computeView();updateHUD();
 }
 function conComplete(inp){const v=inp.value,parts=v.split(/\s+/),last=parts[parts.length-1].toLowerCase();
-  const pool=parts.length===1?Object.keys(CMDS):['spawn','give'].includes(parts[0].toLowerCase())?[...Object.keys(conMonsters()),...Object.keys(ITEMS).filter(k=>k!=='weapon'),...Object.keys(WEAPONS)]:parts[0].toLowerCase()==='list'?['monsters','items','weapons']:[];
+  const pool=parts.length===1?Object.keys(CMDS):['spawn','give'].includes(parts[0].toLowerCase())||(parts[0].toLowerCase()==='bind'&&parts.length>2)?[...Object.keys(conMonsters()),...Object.keys(ITEMS).filter(k=>k!=='weapon'),...Object.keys(WEAPONS)]:parts[0].toLowerCase()==='list'?['monsters','items','weapons']:[];
   const m=pool.filter(k=>k.toLowerCase().startsWith(last));if(!m.length)return;
   let pre=m[0];for(const x of m)while(!x.toLowerCase().startsWith(pre.toLowerCase()))pre=pre.slice(0,-1);
   parts[parts.length-1]=m.length===1?m[0]+' ':pre;inp.value=parts.join(' ');if(m.length>1)conPrint(m.slice(0,24).join('  '),'dim')}
@@ -1945,7 +1991,7 @@ function kbAfterRender(){
 function kbButtons(){return [...$('#sheet').querySelectorAll('.btns button:not(:disabled)')]}
 function markKb(){document.querySelectorAll('.kbf').forEach(e=>e.classList.remove('kbf'));if(!kbMode)return;const b=kbButtons();if(!b.length)return;kb.btn=clamp(kb.btn,0,b.length-1);b[kb.btn].classList.add('kbf');
   const sel=$('#sheet .row.sel');if(sel)sel.scrollIntoView({block:'nearest'})}
-function keyDir(e){const key=e.key.length===1?e.key.toLowerCase():e.key;return KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):'']}
+function keyDir(e){return dirFromEvent(e)}
 function modalKey(e){
   const sheet=$('#sheet'),k=e.key,ae=document.activeElement,typing=ae&&((ae.tagName==='INPUT'&&ae.type!=='range')||ae.tagName==='TEXTAREA');
   if(k==='Escape'){e.preventDefault();if(G.over)return;const b=sheet.querySelector('[data-op="back"]')||sheet.querySelector('#pc')||sheet.querySelector('[data-op="close"]');if(b)b.click();else closeModal();return}
@@ -1970,9 +2016,10 @@ function modalKey(e){
   const rows=[...sheet.querySelectorAll('.selrow')];
   if(rows.length){
     const cur=Math.max(0,rows.findIndex(r=>r.classList.contains('sel')));
-    if(k==='ArrowUp'||k==='ArrowDown'||k==='8'||k==='2'){e.preventDefault();const up=k==='ArrowUp'||k==='8';rows[(cur+(up?-1:1)+rows.length)%rows.length].click();return}
+    if(/^Digit[0-9]$/.test(e.code)&&!e.shiftKey&&(invBag||/^PACK/.test(kbScreen()))){e.preventDefault();bindSelected(e.code.slice(5));return}
+    if(k==='ArrowUp'||k==='ArrowDown'||e.code==='Numpad8'||e.code==='Numpad2'){e.preventDefault();const up=k==='ArrowUp'||e.code==='Numpad8';rows[(cur+(up?-1:1)+rows.length)%rows.length].click();return}
     const b=kbButtons();
-    if(k==='ArrowLeft'||k==='ArrowRight'||k==='4'||k==='6'||k==='Tab'){e.preventDefault();const back=k==='ArrowLeft'||k==='4'||(k==='Tab'&&e.shiftKey);kb.btn=(kb.btn+(back?-1:1)+b.length)%b.length;markKb();return}
+    if(k==='ArrowLeft'||k==='ArrowRight'||e.code==='Numpad4'||e.code==='Numpad6'||k==='Tab'){e.preventDefault();const back=k==='ArrowLeft'||e.code==='Numpad4'||(k==='Tab'&&e.shiftKey);kb.btn=(kb.btn+(back?-1:1)+b.length)%b.length;markKb();return}
     if(k==='Enter'||k===' '){e.preventDefault();if(b.length)b[clamp(kb.btn,0,b.length-1)].click()}return}
   // everything else: a vertical list of controls
   const f=kbFocusables();if(!f.length)return;let i=f.indexOf(ae);
@@ -1980,12 +2027,12 @@ function modalKey(e){
   if(ae&&ae.tagName==='SELECT'&&(k==='ArrowLeft'||k==='ArrowRight')){e.preventDefault();ae.selectedIndex=(ae.selectedIndex+(k==='ArrowRight'?1:-1)+ae.options.length)%ae.options.length;ae.dispatchEvent(new Event('input'));return}
   if(typing&&!['ArrowUp','ArrowDown','Enter','Tab'].includes(k))return;
   if(ae&&ae.tagName==='TEXTAREA'&&(k==='ArrowUp'||k==='ArrowDown'))return;
-  const next=['ArrowDown','ArrowRight','2','6'].includes(k)||(k==='Tab'&&!e.shiftKey),prev=['ArrowUp','ArrowLeft','8','4'].includes(k)||(k==='Tab'&&e.shiftKey);
+  const next=['ArrowDown','ArrowRight'].includes(k)||['Numpad2','Numpad6'].includes(e.code)||(k==='Tab'&&!e.shiftKey),prev=['ArrowUp','ArrowLeft'].includes(k)||['Numpad8','Numpad4'].includes(e.code)||(k==='Tab'&&e.shiftKey);
   if(next||prev){e.preventDefault();i=i<0?(next?0:f.length-1):(i+(next?1:-1)+f.length)%f.length;kb.gi=i;f[i].focus();f[i].scrollIntoView({block:'nearest'});return}
   if(k==='Enter'||k===' '){e.preventDefault();if(i<0){kb.gi=0;f[0].focus();return}if(ae.tagName==='BUTTON'||ae.classList.contains('row')){kb.gi=i;ae.click()}else if(typing&&ae.tagName!=='TEXTAREA'){const go=sheet.querySelector('#rs');if(go)go.click()}else if(ae.tagName==='TEXTAREA'&&k==='Enter'&&!e.shiftKey){const go=sheet.querySelector('[data-op="go"]');if(go){e.preventDefault();go.click()}}}
 }
 function openHelp(){
-  const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals)'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
+  const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals) — the number row does not move you'],['Wait a turn','. · numpad 5 · space'],['Item hotkeys','number row 1–0: select an item in your pack and press a number to bind it, or console: bind 1 fire staff'],['Turn without moving','Shift + direction, or F then a direction'],
     ['Items (pack)','Tab or I (Tab again closes) — ↑↓ select an item, then Q W E A S D… pick its options in order, X back, C close'],['Item screens','the buttons are lettered in order Q W E / A S D / R F Z V — your left hand never moves; X is BACK, C is CLOSE'],
     ['Aim a throw or zap','direction keys turn, Shift+← → (or Shift+numpad 4 / 6, or − +) set throw distance, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','Q (or L) — move the cursor, . cycles targets, F faces the target'],
     ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','W (or T)'],['Stairs','D (or > / Enter)'],['Map','M (Esc closes the big map)'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
@@ -2036,8 +2083,11 @@ document.querySelectorAll('#dpad button').forEach(b=>{
     if(dx||dy)rep=setTimeout(()=>{rep=setInterval(()=>{if(modalOpen()||G.over||(!lookMode&&anyMonsterVisible())||faceMode){stop();return}dirInput(dx,dy)},lookMode?90:110)},320)});
   ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,stop));
 });
-const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],
-  '8':[0,-1],'2':[0,1],'4':[-1,0],'6':[1,0],'7':[-1,-1],'9':[1,-1],'1':[-1,1],'3':[1,1],'5':[0,0],'.':[0,0],' ':[0,0]};
+// Arrows (and the keys a NumLock-off numpad sends) move. The numpad is read by physical key, so it always moves;
+// the number row above the letters never moves — it is for item hotkeys.
+const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],Home:[-1,-1],PageUp:[1,-1],End:[-1,1],PageDown:[1,1],Clear:[0,0],'.':[0,0],' ':[0,0]};
+const NUMPAD={Numpad8:[0,-1],Numpad2:[0,1],Numpad4:[-1,0],Numpad6:[1,0],Numpad7:[-1,-1],Numpad9:[1,-1],Numpad1:[-1,1],Numpad3:[1,1],Numpad5:[0,0],NumpadDecimal:[0,0]};
+function dirFromEvent(e){if(e.code&&NUMPAD[e.code])return NUMPAD[e.code];const key=e.key.length===1?e.key.toLowerCase():e.key;return KEYS[key]}
 window.addEventListener('keydown',e=>{
   kbMode=true;
   if(conOpen){conKey(e);return}
@@ -2050,7 +2100,8 @@ window.addEventListener('keydown',e=>{
   if(SB&&e.key===','){e.preventDefault();openSbMenu();return}
   const key=e.key.length===1?e.key.toLowerCase():e.key;
   if(e.code==='Numpad0'||(e.key==='0'&&e.location===3)){e.preventDefault();if(!SB)doAction('explore');return}
-  const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
+  if(/^Digit[0-9]$/.test(e.code)&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();useBind(e.code.slice(5));return}
+  const d=dirFromEvent(e);
   if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])&&!lookMode){G.player.face=[d[0],d[1]];updateHUD();return}dirInput(d[0],d[1]);return}
   if(key==='q'||key==='l'||key==='v'){doAction('look');return}if(key==='w'){doAction('torch');return}if(key==='d'){e.preventDefault();doAction('stairs');return}if(key==='k'){doAction('save');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
   if(key==='f'){doAction('face');return}

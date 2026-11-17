@@ -4,6 +4,16 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.13.0 — Item hotkeys on the number row
+- The numpad and the number row now act separately. The numpad (read by physical key) moves, waits (5) and
+  auto-explores (0); with NumLock off, Home/End/PgUp/PgDn/Clear still move. The number row never moves you.
+- Bind items to 1–9 and 0: select an item in your pack or a bag and press a number, or use the console:
+  `bind 1 fire staff`, `unbind 1`, `unbind all`, `binds`.
+- Pressing a bound number uses the item: staffs open zap aim, jars and other throwables open throw aim,
+  food and scrolls are eaten or read (pulled from a bag if needed), weapons equip, bags open.
+- Binds follow the item kind, so they survive stacks emptying and refilling; they are saved in the browser.
+  A hotbar in the HUD shows each bind with its count or charges (dimmed when you have none).
+
 ## v0.12.1 — Put out and relight campfires
 - Walk into a campfire for a menu: put it out (leaves a dark fire pit that keeps its fuel) or add lumber.
   Walk into a fire pit to relight it or add lumber.

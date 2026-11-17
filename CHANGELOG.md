@@ -4,6 +4,14 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.11.1 — Aimed zaps, zapping from bags, numpad 0 explores
+- Zapping a staff now opens the aim screen first, like throwing: pick a direction, see the real
+  path (12 tiles; gale passes through creatures) and a preview of the effect — who it hits,
+  how many tiles it ignites or freezes, and a warning when lightning will touch water or metal.
+- Staffs can be zapped straight from inside a bag (ZAP / Z in the bag view).
+- Quick-aim targets are numbered on screen; 1–9 picks them.
+- Numpad 0 starts or stops auto-explore.
+
 ## v0.11.0 — Trees, ore & smithing, tainted jerky, smarter investigation, save/load
 - Trees: block movement and sight (cover for sneaking), burn for a long time, attract lightning.
   Walk into one to chop (3 swings, noisy) for 2–4 lumber and sometimes dry grass.

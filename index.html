@@ -992,6 +992,8 @@ function rayPath(range,stopAtEnt){
   }
   return {path,hit};
 }
+const STAFF_KIND={fireStaff:'fire',iceStaff:'ice',boltStaff:'bolt',galeStaff:'gale'};
+function zapStaff(it){if(it.charges<=0){say('Nothing happens. The staff is spent.','dim');return}it.charges--;zap(STAFF_KIND[it.kind])}
 function zap(kind){
   const {path,hit}=rayPath(12,kind!=='gale');
   const col={fire:'#ff8a3d',ice:'#9fe8ff',bolt:'#fff27a',gale:'#e8eef5'}[kind],ch={fire:'*',ice:'+',bolt:'ϟ',gale:'≋'}[kind];
@@ -1067,9 +1069,7 @@ function useItem(k,bag){
     else if(w.seals.includes(d.seal))say(`Your ${WEAPONS[w.w].name} already bears a ${sn} seal.`,'dim');
     else{w.seals.push(d.seal);say(`A ${sn} seal burns into your ${itemName(w)}!`,'good')}
     return true}
-  if(d.staff){
-    if(it.charges<=0){say('Nothing happens. The staff is spent.','dim');return true}
-    it.charges--;zap({fireStaff:'fire',iceStaff:'ice',boltStaff:'bolt',galeStaff:'gale'}[it.kind]);return true}
+  if(d.staff){zapStaff(it);return true}
   takeOne(p.inv,k);
   const area=(r,fn)=>{for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const x=p.x+dx,y=p.y+dy;if(!inb(x,y)||Math.hypot(dx,dy)>r+0.3||!los(p.x,p.y,x,y))continue;fn(x,y,idx(x,y),Math.hypot(dx,dy))}};
   switch(it.kind){
@@ -1238,7 +1238,7 @@ function render(now){
     cx.font=`700 ${(TS*scale).toFixed(1)}px ${FONT}`;cx.shadowColor=color;cx.shadowBlur=glow;cx.fillStyle=color;cx.fillText(ch,px+TS/2,py+TS/2+1);cx.shadowBlur=0};
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;if(tile[i]===T_STAIRS&&G.seen[i])big('>',x,y,G.vis[i]?'#bff6ff':'#4a5a6a',0.8,G.vis[i]?TS*0.5:0)}
   for(const f of G.floorItems){if(!G.vis[idx(f.x,f.y)])continue;const d=ITEMS[f.it.kind];big(d.ch,f.x,f.y,d.color,0.62,TS*0.3)}
-  if(faceMode||G.aimPreview){const {path,hit}=rayPath(10,true);cx.font=`700 ${(TS*0.45).toFixed(1)}px ${FONT}`;
+  if(faceMode||G.aimPreview){const sp=G.aimPreview&&G.aimSpec?G.aimSpec:{range:10,stop:true},{path,hit}=rayPath(sp.range,sp.stop);cx.font=`700 ${(TS*0.45).toFixed(1)}px ${FONT}`;
     path.forEach(([x,y],k)=>{if(k===path.length-1)return;cx.fillStyle=`rgba(255,138,61,${(0.85-k*0.06).toFixed(2)})`;cx.fillText('·',ox+(x+.5)*TS,oy+(y+.5)*TS)});
     if(path.length){const [x,y]=path[path.length-1],px=ox+x*TS,py=oy+y*TS,pulse=0.6+0.4*Math.sin(now*0.01);
       if(hit){cx.strokeStyle=`rgba(255,90,74,${pulse.toFixed(2)})`;cx.lineWidth=Math.max(1.5,TS/12);cx.strokeRect(px+2,py+2,TS-4,TS-4)}
@@ -1344,10 +1344,10 @@ function updateHUD(){
 function renderLog(){const el=$('#log');if(!el)return;el.innerHTML=G.log.slice(-4).map((l,k,a)=>`<div class="${l.cls}" style="opacity:${0.45+0.55*(k+1)/a.length}">${l.msg}</div>`).join('')}
 function setFace(on){faceMode=on;const b=$('#faceBtn');if(b)b.classList.toggle('on',on)}
 function modalOpen(){return !$('#modal').hidden}
-function closeModal(){$('#modal').hidden=true;G.aimPreview=false;const ae=document.activeElement;if(ae&&$('#sheet').contains(ae))ae.blur()}
+function closeModal(){$('#modal').hidden=true;G.aimPreview=false;G.aimSpec=null;const ae=document.activeElement;if(ae&&$('#sheet').contains(ae))ae.blur()}
 function openModal(html,cls){$('#sheet').innerHTML=html;const m=$('#modal');m.className='modal'+(cls?' '+cls:'');m.hidden=false;$('#sheet').scrollTop=0;kbAfterRender()}
 $('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal'&&!G.over)closeModal()});
-const OPKEYS={save:'s',load:'l',del:'x',export:'e',import:'i',copy:'c',go:'↵',merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
+const OPKEYS={zap:'z',save:'s',load:'l',del:'x',export:'e',import:'i',copy:'c',go:'↵',merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
 function bindOps(map){$('#sheet').querySelectorAll('[data-op]').forEach(b=>{b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)};
   const k=OPKEYS[b.dataset.op];if(k&&b.tagName==='BUTTON'&&!b.dataset.key){b.dataset.key=k;b.insertAdjacentHTML('afterbegin',`<span class="kh">${k.toUpperCase()}</span>`)}});kbAfterRender()}
 function choose(title,opts,back){
@@ -1367,26 +1367,42 @@ function cookItems(list){const src=cookSource();if(!src||!list.length)return fal
 function cookHint(it){if(!COOKS[it.kind])return '';return cookSource()?` <span style="color:#ff9a4a">Fire is close — you can cook this.</span>`:' <span class="dim">Stand next to fire or a red-hot grate to cook it.</span>'}
 
 // ---------------- aiming (confirm direction before a throw) ----------------
+// Aim screen for throws and zaps: pick a direction, see exactly where it goes and what it will do, then confirm.
+function aimSpec(it){if(ITEMS[it.kind].staff){const k=STAFF_KIND[it.kind];return {zap:k,range:12,stop:k!=='gale'}}return {zap:null,range:10,stop:true}}
+function zapPreview(kind,path,hit){
+  const n=t=>path.filter(([x,y])=>t.includes(G.tile[idx(x,y)])).length,bits=[];
+  if(kind==='fire'){const f=n([T_GRASS,T_OIL,T_VINE,T_TREE,T_SLICK]);if(f)bits.push(`ignites ${f} tile${f>1?'s':''} on the way`);const m=n([T_ICE,T_SNOW]);if(m)bits.push(`melts ${m}`)}
+  if(kind==='ice'){const w=n([T_WATER]);if(w)bits.push(`freezes ${w} water tile${w>1?'s':''} into ice`);const f=n([T_FIRE]);if(f)bits.push(`puts out ${f} fire${f>1?'s':''}`);const o=n([T_OIL]);if(o)bits.push(`turns ${o} oil to slick ice`)}
+  if(kind==='bolt'){if(n([T_WATER,T_GRATE])||(hit&&[T_WATER,T_GRATE].includes(G.tile[idx(hit.x,hit.y)])))bits.push('<b style="color:#ffe24a">touches water or metal — it will electrify all of it</b>')}
+  if(kind==='gale'){const e=path.map(([x,y])=>entAt(x,y)).find(Boolean);if(e)bits.push(`hurls the ${e.name} back`);const f=n([T_FIRE]);if(f)bits.push(`pushes ${f} fire${f>1?'s':''} forward`)}
+  return bits.length?' It '+bits.join(', ')+'.':''}
 function openAim(it,onFire,back){
-  const p=G.player;G.aimPreview=true;
+  const p=G.player,spec=aimSpec(it);G.aimPreview=true;G.aimSpec=spec;
   const DG=[[-1,-1],[0,-1],[1,-1],[-1,0],null,[1,0],[-1,1],[0,1],[1,1]];
-  const {path,hit}=rayPath(10,true);
+  const {path,hit}=rayPath(spec.range,spec.stop);
   let info;
-  if(hit)info=`<b style="color:#ff6a5a">Will hit the ${hit.name}</b> ${path.length} tile${path.length>1?'s':''} away.`;
-  else if(path.length){const [lx,ly]=path[path.length-1],t=G.tile[idx(lx,ly)];info=`Nothing in the way. It lands ${path.length} tile${path.length>1?'s':''} away on ${TNAME[t]}${t===T_WATER&&!isBag(it)&&!['oilJar','miasma','seeds'].includes(it.kind)?' — and sinks':t===T_FIRE?' — right into the fire':''}.`}
-  else info='<span style="color:#f0c060">Blocked right in front of you — it will drop at your feet.</span>';
-  // quick-aim: visible monsters that a throw in some direction would actually hit
+  if(spec.zap){
+    if(it.charges<=0)info='<span style="color:#f0c060">The staff is spent — nothing will happen, and it still takes a turn.</span>';
+    else if(hit)info=`<b style="color:#ff6a5a">Will hit the ${hit.name}</b> ${path.length} tile${path.length>1?'s':''} away.`+zapPreview(spec.zap,path,hit);
+    else if(path.length)info=`Travels ${path.length} tile${path.length>1?'s':''}${spec.zap==='gale'?'':' and hits nothing'}.`+zapPreview(spec.zap,path,hit);
+    else info='<span style="color:#f0c060">Blocked right in front of you.</span>';
+  }else{
+    if(hit)info=`<b style="color:#ff6a5a">Will hit the ${hit.name}</b> ${path.length} tile${path.length>1?'s':''} away.`;
+    else if(path.length){const [lx,ly]=path[path.length-1],t=G.tile[idx(lx,ly)];info=`Nothing in the way. It lands ${path.length} tile${path.length>1?'s':''} away on ${TNAME[t]}${t===T_WATER&&!isBag(it)&&!['oilJar','miasma','seeds'].includes(it.kind)?' — and sinks':t===T_FIRE?' — right into the fire':''}.`}
+    else info='<span style="color:#f0c060">Blocked right in front of you — it will drop at your feet.</span>';
+  }
+  // quick-aim: visible monsters that this throw or zap would actually reach
   const quick=[],saved=p.face;
   for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;const dx=m.x-p.x,dy=m.y-p.y;if(!(dx===0||dy===0||Math.abs(dx)===Math.abs(dy)))continue;
-    p.face=[sgn(dx),sgn(dy)];const r=rayPath(10,true);if(r.hit===m)quick.push([p.face,m])}
+    p.face=[sgn(dx),sgn(dy)];const r=rayPath(spec.range,true);if(r.hit===m)quick.push([p.face,m])}
   p.face=saved;
-  const cur=p.face.join(',');
-  openModal(`<h3>THROW ${(qty(it)>1?'1 '+ITEMS[it.kind].name:itemName(it)).toUpperCase()} — AIM</h3>
+  const cur=p.face.join(','),verb=spec.zap?'ZAP':'THROW';
+  openModal(`<h3>${verb} ${(spec.zap?itemName(it):qty(it)>1?'1 '+ITEMS[it.kind].name:itemName(it)).toUpperCase()} — AIM</h3>
     <div class="aim"><div class="aimgrid">${DG.map((d,k)=>d?`<button data-op="d${k}" class="${d.join(',')===cur?'on':''}">${ARROWS[d.join(',')]}</button>`:'<span>@</span>').join('')}</div>
     <div class="desc" style="margin:0;flex:1">Facing <b style="color:#ff8a3d">${ARROWS[cur]}</b>. ${info}<br><span class="dim">Check the line on the map, then confirm.</span></div></div>
-    ${quick.length?`<div class="chips">${quick.map(([f,m],k)=>`<button class="chip" data-op="q${k}" style="color:${m.color}">${ARROWS[f.join(',')]} ${m.name}</button>`).join('')}</div>`:''}
-    <div class="btns"><button data-op="fire" class="on">THROW ${ARROWS[cur]}</button><button data-op="back">BACK</button></div>`,'clear');
-  const map={fire:()=>{closeModal();onFire();endTurn()},back:()=>{G.aimPreview=true;back()}};
+    ${quick.length?`<div class="chips">${quick.map(([f,m],k)=>`<button class="chip" data-op="q${k}" style="color:${m.color}">${k+1} · ${ARROWS[f.join(',')]} ${m.name}</button>`).join('')}</div>`:''}
+    <div class="btns"><button data-op="fire" class="on">${verb} ${ARROWS[cur]}</button><button data-op="back">BACK</button></div>`,'clear');
+  const map={fire:()=>{closeModal();G.aimSpec=null;onFire();endTurn()},back:()=>{G.aimPreview=true;back()}};
   DG.forEach((d,k)=>{if(d)map['d'+k]=()=>{p.face=d;updateHUD();openAim(it,onFire,back)}});
   quick.forEach(([f],k)=>map['q'+k]=()=>{p.face=f;updateHUD();openAim(it,onFire,back)});
   bindOps(map);
@@ -1432,7 +1448,8 @@ function openInv(){
     build:()=>act(()=>buildCampfire()),
     cookall:()=>act(()=>cookItems(rawFoods())),
     drop:()=>act(()=>{dropItem(invSel)}),
-    use:()=>{const allBags=bagsIn(it);
+    use:()=>{if(d.staff)return openAim(it,()=>zapStaff(it),openInv);
+      const allBags=bagsIn(it);
       if(d.bagT&&allBags.length){const opts=allBags.map(b=>({label:'Onto '+itemName(b),ch:'(',color:ITEMS[b.kind].color,fn:()=>act(()=>useItem(invSel,b))}));
         if(!d.bagOnly)opts.unshift({label:d.seal||it.kind==='honing'?'Onto your equipped weapon':it.kind==='recharge'?'On your carried staffs':'Around yourself',ch:'@',fn:()=>act(()=>useItem(invSel))});
         choose(`READ ${d.name.toUpperCase()}…`,opts);return}
@@ -1462,10 +1479,11 @@ function openBagView(){
   openModal(`<h3>${bd.name.toUpperCase()} ${items.length}/${bd.bag}${bd.fireproof?' · FIREPROOF':''}</h3>`+
     (items.length?items.map((x,k)=>rowHtml(x,k,bagSel)).join(''):`<div class="desc">Empty. Select an item in your pack and choose PUT IN BAG.</div>`)+
     (it?`<div class="desc">${ITEMS[it.kind].desc}${cookHint(it)}</div>`:'')+
-    `<div class="btns">${it?`<button data-op="take" ${p.inv.length>=12&&!(STACK[it.kind]&&p.inv.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))?'disabled':''}>TAKE OUT</button><button data-op="throw">THROW ${ARROWS[p.face.join(',')]}</button>`+(COOKS[it.kind]&&cookSource()?`<button data-op="cook">COOK</button>`:'')+(qty(it)>1?`<button data-op="split" ${items.length<bd.bag?'':'disabled'}>SPLIT</button>`:''):''}<button data-op="back">BACK</button><button data-op="close">CLOSE</button></div>`);
+    `<div class="btns">${it?`<button data-op="take" ${p.inv.length>=12&&!(STACK[it.kind]&&p.inv.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))?'disabled':''}>TAKE OUT</button><button data-op="throw">THROW ${ARROWS[p.face.join(',')]}</button>`+(ITEMS[it.kind].staff?`<button data-op="zap">ZAP ${ARROWS[p.face.join(',')]}</button>`:'')+(COOKS[it.kind]&&cookSource()?`<button data-op="cook">COOK</button>`:'')+(qty(it)>1?`<button data-op="split" ${items.length<bd.bag?'':'disabled'}>SPLIT</button>`:''):''}<button data-op="back">BACK</button><button data-op="close">CLOSE</button></div>`);
   const map={close:()=>{invBag=null;closeModal()},back:()=>{invBag=null;openInv()},
     take:()=>{const k=items.indexOf(it),name=itemName(it);if(addToPack(it)){items.splice(k,1);say(`You take the ${name} out.`)}else say(`Your pack is full — ${itemName(it)} stays in the ${bd.name}.`,'warn');updateHUD();openInv()},
     split:()=>splitMenu(items,it,bd.bag,openBagView),
+    zap:()=>openAim(it,()=>{say(`You raise the ${ITEMS[it.kind].name} from the ${bd.name}…`,'dim');zapStaff(it)},openBagView),
     throw:()=>openAim(it,()=>{const k=b.items.indexOf(it);if(k<0)return;const one=takeOne(b.items,k);say(`You pull the ${itemName(one)} from the ${bd.name}…`,'dim');throwIt(one)},openBagView),
     cook:()=>act(()=>cookItems([it]))};
   items.forEach((x,k)=>map['r'+k]=()=>{bagSel=k;openBagView()});
@@ -1844,9 +1862,9 @@ function modalKey(e){
 }
 function openHelp(){
   const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals)'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
-    ['Items (pack)','I — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · S split · M combine · C cook · A cook all · B build fire'],
-    ['Aim a throw','direction keys turn, 1–9 picks a visible enemy, Enter throws, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
-    ['Explore','O'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
+    ['Items (pack)','I — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · Z zap (in a bag) · S split · M combine · C cook · A cook all · B build fire'],
+    ['Aim a throw or zap','direction keys turn, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
+    ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
     ['Sandbox','X toggle · M brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
   openModal(`<h3>KEYBOARD</h3>`+L.map(([a,b])=>`<div class="prm" style="grid-template-columns:150px 1fr"><b style="color:#fff">${a}</b><span style="text-align:left;color:#9aa6b6">${b}</span></div>`).join('')+`<div class="btns"><button data-op="close">CLOSE</button></div>`);
   bindOps({close:closeModal})}
@@ -1905,6 +1923,7 @@ window.addEventListener('keydown',e=>{
   if(SB&&e.key==='g'){e.preventDefault();paintFacing();return}
   if(SB&&e.key===','){e.preventDefault();openSbMenu();return}
   const key=e.key.length===1?e.key.toLowerCase():e.key;
+  if(e.code==='Numpad0'||(e.key==='0'&&e.location===3)){e.preventDefault();if(!SB)doAction('explore');return}
   const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
   if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])&&!lookMode){G.player.face=[d[0],d[1]];updateHUD();return}dirInput(d[0],d[1]);return}
   if(key==='l'||key==='v'){doAction('look');return}if(key==='k'){doAction('save');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}

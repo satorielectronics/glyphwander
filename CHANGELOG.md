@@ -4,6 +4,11 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.13.2 — Bind from the item menu
+- Every item in your pack or a bag has a BIND option: pick a number-row slot (press 1–0), see what each slot holds,
+  replace a slot or unbind. The button shows the current key, e.g. BIND [4].
+- Item-menu options now run Q W E A S D, then Z X, then R F V. C still closes; on screens with BACK, X stays BACK.
+
 ## v0.13.1 — Dismantle campfires
 - Campfire and fire-pit menus have a Dismantle option: the spot becomes ash you can walk through.
   You get back 1 lumber for every 60 turns of fuel left (dropped on the ground if your pack is full).

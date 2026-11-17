@@ -1280,14 +1280,16 @@ function closeModal(){$('#modal').hidden=true;G.aimPreview=false;G.aimSpec=null;
 function openModal(html,cls){$('#sheet').innerHTML=html;const m=$('#modal');m.className='modal'+(cls?' '+cls:'');m.hidden=false;$('#sheet').scrollTop=0;kbAfterRender()}
 $('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal'&&!G.over)closeModal()});
 const OPKEYS={zap:'z',save:'s',load:'l',del:'x',export:'e',import:'i',copy:'c',go:'↵',merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
-// Item screens use left-hand keys by position: the options in order are Q W E A S D R F Z V, BACK is X, CLOSE is C.
-const POSKEYS=['q','w','e','a','s','d','r','f','z','v'];
+// Item screens use left-hand keys by position: the options in order are Q W E A S D, then Z X, then R F V.
+// CLOSE is C. On screens with a BACK button, BACK keeps X and the options skip it.
+const POSKEYS=['q','w','e','a','s','d','z','x','r','f','v'];
 function bindOps(map,positional){const sheet=$('#sheet');
   sheet.querySelectorAll('[data-op]').forEach(b=>{b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)}});
   const tag=(el,k)=>{el.dataset.key=k;el.insertAdjacentHTML('afterbegin',`<span class="kh">${k.toUpperCase()}</span>`)};
   if(positional){let n=0;
     const opts=[...sheet.querySelectorAll('.row[data-op^="c"]'),...sheet.querySelectorAll('.btns button[data-op]')];
-    for(const el of opts){const op=el.dataset.op;if(op==='close')tag(el,'c');else if(op==='back')tag(el,'x');else if(n<POSKEYS.length)tag(el,POSKEYS[n++])}}
+    const keys=sheet.querySelector('[data-op="back"]')?POSKEYS.filter(k=>k!=='x'):POSKEYS;
+    for(const el of opts){const op=el.dataset.op;if(op==='close')tag(el,'c');else if(op==='back')tag(el,'x');else if(n<keys.length)tag(el,keys[n++])}}
   else sheet.querySelectorAll('[data-op]').forEach(b=>{const k=OPKEYS[b.dataset.op];if(k&&b.tagName==='BUTTON'&&!b.dataset.key)tag(b,k)});
   kbAfterRender()}
 function choose(title,opts,back){
@@ -1377,7 +1379,7 @@ function openInv(){
   if(!isBag(it)&&bagsIn(it).length)btns+=`<button data-op="put" ${bags.length?'':'disabled'}>PUT IN BAG</button>`;
   if(qty(it)>1)btns+=`<button data-op="split" ${inv.length<12?'':'disabled'}>SPLIT</button>`;
   if(STACK[it.kind]&&inv.some(o=>o!==it&&o.kind===it.kind&&qty(o)<STACK[it.kind]))btns+=`<button data-op="merge">COMBINE</button>`;
-  btns+=`<button data-op="throw">THROW ${dir}</button><button data-op="drop">DROP</button><button data-op="close">CLOSE</button>`;
+  btns+=`<button data-op="throw">THROW ${dir}</button><button data-op="drop">DROP</button><button data-op="bind">${bindBtnLabel(it)}</button><button data-op="close">CLOSE</button>`;
   let extra=STACK[it.kind]?` Stacks up to ${STACK[it.kind]}.`:'';if(it.kind==='weapon'){const w=WEAPONS[it.w];extra=` Power ${w.atk}${it.plus?(it.plus>0?' +':' ')+it.plus:''}.${w.dig?' Bump walls to dig through them.':''}${it.seals.length?' Seals: '+it.seals.map(s=>SEALS[s].name).join(', ')+'.':''}`}
   if(isBag(it))extra=it.items.length?' Inside: '+it.items.map(itemName).join(', ')+'.':' Empty.';
   extra+=cookHint(it);
@@ -1390,6 +1392,7 @@ function openInv(){
     throw:()=>openAim(it,()=>throwItem(invSel),openInv),
     cook:()=>act(()=>cookItems([it])),
     split:()=>splitMenu(inv,it,12,openInv),
+    bind:()=>openBindPick(it,openInv),
     merge:()=>{const left=mergeInto(inv,it);if(!left){inv.splice(inv.indexOf(it),1);invSel=Math.max(0,invSel-1)}say('You combine the stacks.');openInv()},
     build:()=>act(()=>buildCampfire()),
     cookall:()=>act(()=>cookItems(rawFoods())),
@@ -1425,10 +1428,11 @@ function openBagView(){
   openModal(`<h3>${bd.name.toUpperCase()} ${items.length}/${bd.bag}${bd.fireproof?' · FIREPROOF':''}</h3>`+
     (items.length?items.map((x,k)=>rowHtml(x,k,bagSel)).join(''):`<div class="desc">Empty. Select an item in your pack and choose PUT IN BAG.</div>`)+
     (it?`<div class="desc">${ITEMS[it.kind].desc}${cookHint(it)}</div>`:'')+
-    `<div class="btns">${it?`<button data-op="take" ${p.inv.length>=12&&!(STACK[it.kind]&&p.inv.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))?'disabled':''}>TAKE OUT</button><button data-op="throw">THROW ${ARROWS[p.face.join(',')]}</button>`+(ITEMS[it.kind].staff?`<button data-op="zap">ZAP ${ARROWS[p.face.join(',')]}</button>`:'')+(COOKS[it.kind]&&cookSource()?`<button data-op="cook">COOK</button>`:'')+(qty(it)>1?`<button data-op="split" ${items.length<bd.bag?'':'disabled'}>SPLIT</button>`:''):''}<button data-op="back">BACK</button><button data-op="close">CLOSE</button></div>`);
+    `<div class="btns">${it?`<button data-op="take" ${p.inv.length>=12&&!(STACK[it.kind]&&p.inv.some(o=>o.kind===it.kind&&qty(o)<STACK[it.kind]))?'disabled':''}>TAKE OUT</button><button data-op="throw">THROW ${ARROWS[p.face.join(',')]}</button>`+(ITEMS[it.kind].staff?`<button data-op="zap">ZAP ${ARROWS[p.face.join(',')]}</button>`:'')+(COOKS[it.kind]&&cookSource()?`<button data-op="cook">COOK</button>`:'')+(qty(it)>1?`<button data-op="split" ${items.length<bd.bag?'':'disabled'}>SPLIT</button>`:'')+`<button data-op="bind">${bindBtnLabel(it)}</button>`:''}<button data-op="back">BACK</button><button data-op="close">CLOSE</button></div>`);
   const map={close:()=>{invBag=null;closeModal()},back:()=>{invBag=null;openInv()},
     take:()=>{const k=items.indexOf(it),name=itemName(it);if(addToPack(it)){items.splice(k,1);say(`You take the ${name} out.`)}else say(`Your pack is full — ${itemName(it)} stays in the ${bd.name}.`,'warn');updateHUD();openInv()},
     split:()=>splitMenu(items,it,bd.bag,openBagView),
+    bind:()=>openBindPick(it,openBagView),
     zap:()=>openAim(it,()=>{say(`You raise the ${ITEMS[it.kind].name} from the ${bd.name}…`,'dim');zapStaff(it)},openBagView),
     throw:()=>openAim(it,()=>{const k=b.items.indexOf(it);if(k<0)return;const one=takeOne(b.items,k);say(`You pull the ${itemName(one)} from the ${bd.name}…`,'dim');throwIt(one)},openBagView),
     cook:()=>act(()=>cookItems([it]))};
@@ -1793,6 +1797,22 @@ function useBind(d){
     invBag=null;invSel=k;openInv();const u=$('#sheet [data-op="use"]');if(u)u.click();return}
   openAim(it,()=>{const g=findBound(b);if(!g)return;throwIt(takeOne(g.list,g.k))},closeModal);
 }
+const bindsOf=it=>Object.keys(BINDS).filter(d=>bindMatch(it,BINDS[d])).sort();
+function bindBtnLabel(it){const k=bindsOf(it);return k.length?`BIND [${k.join(',')}]`:'BIND'}
+// Pick a number-row key for an item. Number keys pick a slot directly; a slot holding another item is replaced.
+function openBindPick(it,back){
+  const kind={kind:it.kind};if(it.kind==='weapon')kind.w=it.w;const mine=bindsOf(it);
+  const slots=['1','2','3','4','5','6','7','8','9','0'].map(d=>{const b=BINDS[d],l=b?bindLabel(b).name:'—',me=mine.includes(d);
+    return `<button data-op="b${d}" data-key="${d}" class="${me?'on':''}"><span class="kh">${d}</span>${me?'✓ ':''}${l}</button>`}).join('');
+  openModal(`<h3>BIND ${itemName(it).toUpperCase()}</h3><div class="desc">Press a number-row key (or pick a slot). Pressing that key during play
+    will ${ITEMS[it.kind].staff?'aim and zap it':it.kind==='weapon'?'equip it':isBag(it)?'open it':ITEMS[it.kind].use?(FOOD.includes(it.kind)?'eat it':'read it'):'aim and throw it'}.
+    A slot that already holds something is replaced.</div><div class="btns">${slots}</div>
+    <div class="btns">${mine.length?`<button data-op="unbind" data-key="u"><span class="kh">U</span>UNBIND</button>`:''}<button data-op="back" data-key="x"><span class="kh">X</span>BACK</button></div>`);
+  const map={back,unbind:()=>{mine.forEach(d=>delete BINDS[d]);saveBinds();updateHUD();say(`${itemName(it)} unbound.`,'dim');back()}};
+  ['1','2','3','4','5','6','7','8','9','0'].forEach(d=>map['b'+d]=()=>{const old=BINDS[d];setBind(d,kind);
+    say(`${bindName(kind)} bound to ${d}${old&&!bindMatch(it,old)?` (replaces ${bindName(old)})`:''}.`,'good');back()});
+  bindOps(map,false);
+}
 function hotbarHTML(){const keys=Object.keys(BINDS).sort((a,b)=>(a==='0'?10:+a)-(b==='0'?10:+b));if(!keys.length)return '';
   return keys.map(d=>{const l=bindLabel(BINDS[d]);return `<span class="hb${l.have?'':' off'}"><i>${d}</i>${l.name}${l.count?' '+l.count:''}</span>`}).join('')}
 
@@ -1935,7 +1955,7 @@ function modalKey(e){
 }
 function openHelp(){
   const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals) — the number row does not move you'],['Wait a turn','. · numpad 5 · space'],['Item hotkeys','number row 1–0: select an item in your pack and press a number to bind it, or console: bind 1 fire staff'],['Turn without moving','Shift + direction, or F then a direction'],
-    ['Items (pack)','Tab or I (Tab again closes) — ↑↓ select an item, then Q W E A S D… pick its options in order, X back, C close'],['Item screens','the buttons are lettered in order Q W E / A S D / R F Z V — your left hand never moves; X is BACK, C is CLOSE'],
+    ['Items (pack)','Tab or I (Tab again closes) — ↑↓ select an item, then Q W E A S D Z X pick its options in order (X is BACK on screens that have one), C close; BIND puts it on a number-row key'],['Item screens','the buttons are lettered in order Q W E / A S D / Z X, then R F V — your left hand never moves; C is CLOSE, and X is BACK on screens with a BACK button'],
     ['Aim a throw or zap','direction keys turn, Shift+← → (or Shift+numpad 4 / 6, or − +) set throw distance, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','Q (or L) — move the cursor, . cycles targets, F faces the target'],
     ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','W (or T)'],['Stairs','D (or > / Enter)'],['Map','M (Esc closes the big map)'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
     ['Sandbox','X toggle · B brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Console','~ (backtick) — spawn monsters and items, give gear, gold, heal… type help'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];

@@ -45,6 +45,7 @@ Every build has a `release/vX.Y.Z` branch. See `CHANGELOG.md` for what each one 
 | `release/v0.12.0` | Console (~) for spawning monsters and items |
 | `release/v0.12.1` | Put out and relight campfires |
 | `release/v0.13.0` | Number-row item hotkeys (`bind`), numpad separate |
+| `release/v0.13.2` | BIND in the item menu; Z X after Q W E A S D |
 | `release/v0.13.1` | Dismantle campfires |
 
 ## License

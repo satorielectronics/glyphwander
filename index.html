@@ -113,8 +113,8 @@ select,input[type=number]{font:inherit;background:#0d1219;color:#cfd6e0;border:1
 // ============================================================
 const W=48,H=32;
 const T_WALL=0,T_FLOOR=1,T_GRASS=2,T_WATER=3,T_FIRE=4,T_ASH=5,T_OIL=6,T_ICE=7,T_STAIRS=8,
-      T_MUD=9,T_DIRT=10,T_VINE=11,T_VINE_ICE=12,T_GRATE=13,T_SNOW=14,T_SLICK=15,T_CAMP=16,T_TREE=17,T_PIT=18;
-const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs','mud','dirt','vines','frozen vines','grate','snow','slick ice','campfire','tree','fire pit'];
+      T_MUD=9,T_DIRT=10,T_VINE=11,T_VINE_ICE=12,T_GRATE=13,T_SNOW=14,T_SLICK=15,T_CAMP=16,T_TREE=17,T_PIT=18,T_BUSH=19,T_ROCK=20;
+const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs','mud','dirt','vines','frozen vines','grate','snow','slick ice','campfire','tree','fire pit','bush','boulder'];
 const DIRS8=[[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
 const DIRS4=[[0,-1],[1,0],[0,1],[-1,0]];
 const ARROWS={'0,-1':'↑','1,-1':'↗','1,0':'→','1,1':'↘','0,1':'↓','-1,1':'↙','-1,0':'←','-1,-1':'↖'};
@@ -194,6 +194,7 @@ const ITEMS={
   boltStaff:{ch:'/',color:'#ffe24a',name:'Staff of Thunder',staff:true,use:true,desc:'Zap lightning forward. Electrifies every connected tile of water and metal grate it touches.'},
   galeStaff:{ch:'/',color:'#e8eef5',name:'Staff of Gales',staff:true,use:true,desc:'Blast wind forward: pushes fire, smoke and poison down the line and hurls the first creature up to 3 tiles.'},
   oilJar:{ch:'!',color:'#b07cff',name:'Oil Jar',use:false,desc:'Throw to splash oil (radius 1). Oil burns fast and chains. Explodes if it lands in fire.'},
+  smokeJar:{ch:'!',color:'#b8c0cc',name:'Smoke Jar',use:false,desc:'Throw to raise a thick smoke screen for several turns. Nothing can see into, out of or through it — not even you.'},
   miasma:{ch:'!',color:'#a6d84a',name:'Miasma Jar',use:false,desc:'Throw to release a poison cloud. Poison gas detonates along the whole cloud when it touches fire.'},
   seeds:{ch:'*',color:'#9be06a',name:'Grass Seeds',use:false,desc:'Throw to sprout grass (radius 2). Fuel for later.'},
   inferno:{ch:'?',color:'#ff5a3a',name:'Inferno Scroll',use:true,desc:'Ignites everything flammable within 3 tiles and scorches nearby foes. Including the grass you stand on.'},
@@ -225,7 +226,7 @@ ITEMS.inferno.bagT=true;ITEMS.inferno.desc+=' Read onto a bag: cooks the food in
 ITEMS.rain.bagT=true;ITEMS.rain.desc+=' Read onto a bag: seeds inside sprout into herbs.';
 const WEAPONS={dagger:{name:'Dagger',atk:2},club:{name:'Club',atk:3},katana:{name:'Katana',atk:5},pickaxe:{name:'Pickaxe',atk:2,dig:true},greatsword:{name:'Greatsword',atk:7},mithril:{name:'Mithril Edge',atk:9}};
 const SEALS={fire:{tag:'F',name:'flame'},ice:{tag:'I',name:'frost'},bolt:{tag:'T',name:'thunder'},venom:{tag:'V',name:'venom'}};
-const ITEM_W=[['onigiri',13],['herb',11],['meat',3],['fireStaff',6],['iceStaff',5],['boltStaff',5],['galeStaff',5],['oilJar',8],['miasma',5],['seeds',6],['inferno',4],['rain',4],['blizzard',4],
+const ITEM_W=[['onigiri',13],['herb',11],['meat',3],['fireStaff',6],['iceStaff',5],['boltStaff',5],['galeStaff',5],['oilJar',8],['miasma',5],['smokeJar',5],['seeds',6],['inferno',4],['rain',4],['blizzard',4],
   ['weapon',6],['pouch',3],['satchel',2],['coldbox',2],['honing',5],['flameSeal',2],['frostSeal',2],['thunderSeal',2],['venomSeal',2],['smelting',2],['recharge',2],['lumber',6],['dryGrass',6],['reveal',3],['storm',3]];
 const MON={
   rat:{ch:'r',name:'cave rat',color:'#c8a27c',hp:5,atk:2,def:0,xp:2,min:1,w:9,ai:'wander',meat:.25},
@@ -292,7 +293,7 @@ function nextFloor(){
   if(G.depth>FINAL_FLOOR){victory();return}
   G.rng=mulberry32(hashU(P.seed,G.depth,0xA11CE,7));
   G.night=G.depth>=2&&h01(P.seed,G.depth,8,8)<P.nightChance;
-  G.flies=[];
+  G.flies=[];G.smokes=[];
   genFloor();
   const p=G.player;
   const start=randomRoomCell(c=>[T_FLOOR,T_GRASS,T_DIRT].includes(G.tile[c]),G.stairRoom);
@@ -375,8 +376,15 @@ function genTreesAndOre(){
   for(const r of G.rooms){if(!r.real||R()>=0.45)continue;const n=2+Math.floor(R()*5);
     for(let k=0;k<n*4&&k<60;k++){const x=r.x+1+Math.floor(R()*Math.max(1,r.w-2)),y=r.y+1+Math.floor(R()*Math.max(1,r.h-2)),i=idx(x,y);
       if(![T_FLOOR,T_GRASS,T_DIRT].includes(G.tile[i]))continue;let ok=true;
-      for(const [dx,dy] of DIRS8){const t=G.tile[idx(x+dx,y+dy)];if(t===T_WALL||t===T_TREE||t===T_STAIRS||t===T_VINE){ok=false;break}}
+      for(const [dx,dy] of DIRS8){const t=G.tile[idx(x+dx,y+dy)];if(t===T_WALL||t===T_TREE||t===T_ROCK||t===T_STAIRS||t===T_VINE){ok=false;break}}
       if(ok){G.tile[i]=T_TREE;G.fuel[i]=3}}}
+  // bush thickets (walkable, hide whoever stands in them) and lone boulders (solid cover)
+  const R2=mulberry32(hashU(P.seed,G.depth,3,0)),open=t=>[T_FLOOR,T_GRASS,T_DIRT].includes(t);
+  for(const r of G.rooms){if(!r.real)continue;
+    if(R2()<0.55){const clumps=1+Math.floor(R2()*2);for(let c=0;c<clumps;c++){let x=r.x+Math.floor(R2()*r.w),y=r.y+Math.floor(R2()*r.h);const n=3+Math.floor(R2()*4);
+      for(let k=0;k<n;k++){const i=idx(x,y);if(open(G.tile[i]))G.tile[i]=T_BUSH;const [dx,dy]=DIRS8[Math.floor(R2()*8)];x=clamp(x+dx,r.x,r.x+r.w-1);y=clamp(y+dy,r.y,r.y+r.h-1)}}}
+    if(R2()<0.4){const n=1+Math.floor(R2()*3);for(let k=0;k<n*4&&k<30;k++){const x=r.x+1+Math.floor(R2()*Math.max(1,r.w-2)),y=r.y+1+Math.floor(R2()*Math.max(1,r.h-2)),i=idx(x,y);
+      if(!open(G.tile[i]))continue;if(DIRS8.some(([dx,dy])=>{const t=G.tile[idx(x+dx,y+dy)];return t===T_WALL||t===T_TREE||t===T_ROCK||t===T_STAIRS||t===T_VINE}))continue;G.tile[i]=T_ROCK}}}
   // ore veins in walls that face open ground
   const face=[];for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const i=idx(x,y);if(G.tile[i]!==T_WALL)continue;if(DIRS4.some(([dx,dy])=>passTile(G.tile[idx(x+dx,y+dy)])||G.tile[idx(x+dx,y+dy)]===T_TREE))face.push(i)}
   const vein=(kind,len)=>{let i=face[Math.floor(R()*face.length)];for(let k=0;k<len;k++){G.ore[i]=kind;const x=i%W,y=(i/W)|0;
@@ -448,15 +456,22 @@ function buildCampfire(){
   fxGlyph(x,y,'^','#ffb050',0,500);return true}
 
 // ---------------- queries ----------------
-function passTile(t){return t!==T_WALL&&t!==T_VINE&&t!==T_VINE_ICE&&t!==T_CAMP&&t!==T_TREE&&t!==T_PIT}
+function passTile(t){return t!==T_WALL&&t!==T_ROCK&&t!==T_VINE&&t!==T_VINE_ICE&&t!==T_CAMP&&t!==T_TREE&&t!==T_PIT}
 function entAt(x,y){if(!G.ents)return null;for(const e of G.ents)if(!e.dead&&e.x===x&&e.y===y)return e;return null}
 function occupant(x,y){return entAt(x,y)||(G.player.x===x&&G.player.y===y?G.player:null)||(G.npc&&G.npc.x===x&&G.npc.y===y?G.npc:null)}
 function canDiag(x,y,dx,dy){if(dx&&dy)return G.tile[idx(x+dx,y)]!==T_WALL&&G.tile[idx(x,y+dy)]!==T_WALL;return true}
 function walkable(x,y){return inb(x,y)&&passTile(G.tile[idx(x,y)])}
-function blocksSight(i){const t=G.tile[i];return t===T_WALL||t===T_TREE||t===T_VINE||t===T_VINE_ICE||G.gas[i]+G.pois[i]>0.85}
-function los(x0,y0,x1,y1){let dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx+dy,x=x0,y=y0;
+// Cover: trees, bushes and boulders block sight, but you can peek past cover right next to you.
+// So hugging a tree lets you watch an enemy while the tree hides you from it (enemies never peek).
+const COVER=t=>t===T_TREE||t===T_BUSH||t===T_ROCK;
+function blocksSight(i){const t=G.tile[i];return t===T_WALL||COVER(t)||t===T_VINE||t===T_VINE_ICE||G.gas[i]+G.pois[i]>0.85}
+function los(x0,y0,x1,y1,peek){let dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx+dy,x=x0,y=y0;
   while(!(x===x1&&y===y1)){const e2=2*err;if(e2>=dy){err+=dy;x+=sx}if(e2<=dx){err+=dx;y+=sy}
-    if(x===x1&&y===y1)return true;if(blocksSight(y*W+x))return false}return true}
+    if(x===x1&&y===y1)return true;const i=y*W+x;
+    if(blocksSight(i)&&!(peek&&COVER(G.tile[i])&&G.gas[i]+G.pois[i]<=0.85&&Math.abs(x-x0)<=1&&Math.abs(y-y0)<=1))return false}return true}
+// can this creature see the player's square at all? (a bush hides you from anything more than a step away)
+function seesPlayer(m){const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(d>9||!los(m.x,m.y,p.x,p.y))return false;
+  if(d>1&&G.tile[idx(p.x,p.y)]===T_BUSH)return false;return true}
 function nearestFire(x,y,r){let best=null,bd=99;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny)||(G.tile[idx(nx,ny)]!==T_FIRE&&G.tile[idx(nx,ny)]!==T_CAMP))continue;const d=Math.hypot(dx,dy);if(d<bd){bd=d;best=[nx,ny]}}return best}
 
 // ---------------- view / light ----------------
@@ -488,18 +503,18 @@ function computeView(){
     let L=Math.max(G.env[i],tr?Math.max(0,1-d/(tr+0.5)):0);
     if(d<=(tr?1.5:2.5))L=Math.max(L,tr?0.22:0.16);   // you can always make out what's close; eyes adjust without a torch
     if(L<=0.04)continue;
-    if(!los(p.x,p.y,x,y))continue;
+    if(!los(p.x,p.y,x,y,true))continue;
     L=Math.max(L*(1-Math.min(0.45,(G.gas[i]+G.pois[i])*0.45)),G.env[i]*0.85);
     G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(L,0.08);
   }
   // silhouettes: creatures in line of sight within 8 tiles can be made out even in darkness
-  for(const m of G.ents){m.silhouette=false;const i=idx(m.x,m.y);if(G.vis[i]||cheb(m.x,m.y,p.x,p.y)>8||!los(p.x,p.y,m.x,m.y))continue;G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(G.light[i],0.1);m.silhouette=true}
+  for(const m of G.ents){m.silhouette=false;const i=idx(m.x,m.y);if(G.vis[i]||cheb(m.x,m.y,p.x,p.y)>8||!los(p.x,p.y,m.x,m.y,true))continue;G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(G.light[i],0.1);m.silhouette=true}
   computeCones();buildMinimap();
 }
 // ---------------- perception ----------------
 function facingDot(m,x,y){const [fx,fy]=m.face||DIRS8[m.dir||0],vx=x-m.x,vy=y-m.y,l=Math.hypot(vx,vy);if(!l)return 1;return (fx*vx+fy*vy)/(Math.hypot(fx,fy)*l)}
 function detects(m){
-  const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(d>9||!los(m.x,m.y,p.x,p.y))return false;
+  const p=G.player,d=cheb(m.x,m.y,p.x,p.y);if(!seesPlayer(m))return false;
   const dot=facingDot(m,p.x,p.y);
   if(d<=1&&dot>-0.35)return true;
   const cone=dot>=0.35?1:dot>=-0.35?0.35:0.1;
@@ -605,6 +620,7 @@ function ignite(i){const t=G.tile[i];
   else if(t===T_OIL||t===T_SLICK){G.tile[i]=T_FIRE;G.fuel[i]=2;G.src[i]=2;G.stored[i]=0}
   else if(t===T_VINE){G.tile[i]=T_FIRE;G.fuel[i]=2;G.src[i]=3}
   else if(t===T_TREE){G.tile[i]=T_FIRE;G.fuel[i]=10;G.src[i]=4}
+  else if(t===T_BUSH){G.tile[i]=T_FIRE;G.fuel[i]=Math.max(2,P.burnTime-1);G.src[i]=3}
   else if(t===T_PIT&&G.fuel[i]>0){G.tile[i]=T_CAMP;if(G.vis[i])say('The fire pit catches and flares back to life.','fire')}
   else if(t===T_VINE_ICE)G.tile[i]=T_VINE;
   else if(t===T_ICE||t===T_SNOW){G.tile[i]=T_WATER;plunge(i)}
@@ -659,11 +675,11 @@ function worldStep(){
       if(!inb(nx,ny)){if(!(dx&&dy))wallO++;continue}
       const nc=t[ny*W+nx],orth=!(dx&&dy);
       if(orth){if(nc===T_GRASS)grassN++;if(nc===T_VINE)vineN++;if(nc===T_WALL)wallO++}
-      if(nc===T_CAMP&&(c===T_GRASS||c===T_OIL||c===T_VINE||c===T_TREE)){fireN++;q*=1-clamp((c===T_OIL?P.oilSpread:P.fireSpread)*0.08*(orth?1:0.6),0,1);continue}
+      if(nc===T_CAMP&&(c===T_GRASS||c===T_OIL||c===T_VINE||c===T_TREE||c===T_BUSH)){fireN++;q*=1-clamp((c===T_OIL?P.oilSpread:P.fireSpread)*0.08*(orth?1:0.6),0,1);continue}
       if(nc!==T_FIRE)continue;fireN++;
-      if(c===T_GRASS||c===T_OIL||c===T_VINE||c===T_TREE){
+      if(c===T_GRASS||c===T_OIL||c===T_VINE||c===T_TREE||c===T_BUSH){
         const along=(-dx*wx-dy*wy)/Math.hypot(dx,dy);
-        let base=c===T_OIL?P.oilSpread:c===T_VINE?P.vineSpread:c===T_TREE?P.fireSpread*0.45:P.fireSpread*(0.6+nh[i]*0.8);
+        let base=c===T_OIL?P.oilSpread:c===T_VINE?P.vineSpread:c===T_TREE?P.fireSpread*0.45:c===T_BUSH?P.fireSpread*0.9:P.fireSpread*(0.6+nh[i]*0.8);
         q*=1-clamp(base*(orth?1:0.7)*(1+ws*along*1.5),0,1)}
     }
     const r=h01(S,T,i,1),hh=nh[i];
@@ -671,8 +687,8 @@ function worldStep(){
       case T_PIT: if(f[i]>0&&((fireN&&r<0.25)||(hh>P.ignitePoint&&h01(S,T,i,8)<0.3))){nt[i]=T_CAMP;if(G.vis[i])say('Flames reach the fire pit — it relights.','fire')}break;
       case T_CAMP: nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0;if(G.vis[i])say('A campfire burns down to embers.','dim')}break;
       case T_FIRE: nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0;if(G.src[i]===1)burntGrass.push(i)}break;
-      case T_GRASS:case T_OIL:case T_VINE:case T_TREE:
-        if((fireN&&r<1-q)||(hh>P.ignitePoint&&h01(S,T,i,6)<0.35)){nt[i]=T_FIRE;nf[i]=c===T_GRASS?P.burnTime:c===T_TREE?10:2;G.src[i]=c===T_GRASS?1:c===T_OIL?2:c===T_TREE?4:3;if(c===T_TREE&&G.vis[i])say('A tree goes up in flames!','fire')}
+      case T_GRASS:case T_OIL:case T_VINE:case T_TREE:case T_BUSH:
+        if((fireN&&r<1-q)||(hh>P.ignitePoint&&h01(S,T,i,6)<0.35)){nt[i]=T_FIRE;nf[i]=c===T_GRASS?P.burnTime:c===T_TREE?10:c===T_BUSH?Math.max(2,P.burnTime-1):2;G.src[i]=c===T_GRASS?1:c===T_OIL?2:c===T_TREE?4:3;if(c===T_TREE&&G.vis[i])say('A tree goes up in flames!','fire')}
         else if(c===T_GRASS&&wallO>=2&&h01(S,T,i,7)<P.vineGrowth*0.5&&!occupant(x,y))nt[i]=T_VINE;
         break;
       case T_ASH: if(r<P.regrow)nt[i]=T_GRASS;break;
@@ -694,6 +710,7 @@ function worldStep(){
   for(const fi of G.floorItems)if(fi.it.kind==='rotten')ep[idx(fi.x,fi.y)]+=0.12;
   let ng=diffuse(G.gas,es,0.9,wx,wy,ws),np=diffuse(G.pois,ep,P.poisonDecay,wx,wy,ws);
   G.tile=nt;G.fuel=nf;G.heat=nh;G.gas=ng;G.pois=np;
+  if(G.smokes&&G.smokes.length){for(const sm of G.smokes){smokeFill(ng,sm);sm.t--}G.smokes=G.smokes.filter(sm=>sm.t>0)}
   for(const i of plunged)plunge(i);
   // 4. poison flash: any poison touching fire/extreme heat detonates the whole connected cloud
   const seeds=[];
@@ -721,6 +738,7 @@ function worldStep(){
     if(k==='onigiri'){fi.it.kind='grilled';if(vis)say('An onigiri sizzles in the flames… grilled!','fire')}
     else if(k==='meat'||k==='rotten'){fi.it.kind=k==='meat'?'cooked':'tainted';if(vis)say(k==='meat'?'Meat sizzles in the fire. Cooked!':'Rotten meat crackles in the fire… it smells strange.','fire')}
     else if(k==='oilJar'){G.floorItems.splice(G.floorItems.indexOf(fi),1);explode(fi.x,fi.y,'An oil jar explodes!')}
+    else if(k==='smokeJar'){G.floorItems.splice(G.floorItems.indexOf(fi),1);smokeScreen(fi.x,fi.y);if(vis)say('A smoke jar cracks in the heat…','dim')}
     else if(k==='miasma'){G.floorItems.splice(G.floorItems.indexOf(fi),1);poisonCloud(fi.x,fi.y,2,1);if(vis)say('A miasma jar cracks in the heat…','warn')}
     else if(['herb','seeds','dryGrass'].includes(k)||ITEMS[k].ch==='?'){G.floorItems.splice(G.floorItems.indexOf(fi),1);if(vis)say(`The ${ITEMS[k].name} burns up.`,'fire')}
   }
@@ -737,14 +755,19 @@ function flash(seeds){
     for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const j=ny*W+nx;if(seen.has(j)||G.pois[j]<0.06||G.tile[j]===T_WALL)continue;seen.add(j);q.push([j,d+1])}}
   if(any)say(`The poison cloud ignites! (${n} tiles)`,'fire');
 }
+function smokeScreen(x,y){if(!G.smokes)G.smokes=[];G.smokes.push({x,y,t:9});smokeFill(G.gas,G.smokes[G.smokes.length-1])}
+function smokeFill(gas,s){const top=s.t>3?1:0.55+0.12*s.t;
+  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const nx=s.x+dx,ny=s.y+dy,d=Math.hypot(dx,dy);if(!inb(nx,ny)||d>2.3)continue;const j=idx(nx,ny);if(G.tile[j]===T_WALL)continue;
+    gas[j]=Math.max(gas[j],d<=1.5?top:top*0.93)}}
 function poisonCloud(x,y,r,amt){for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny)||Math.hypot(dx,dy)>r+0.3)continue;const i=idx(nx,ny);if(G.tile[i]===T_WALL)continue;G.pois[i]=Math.min(1,G.pois[i]+amt*(1-Math.hypot(dx,dy)/(r+1.5)))}}
 function explode(x,y,msg){
   noise(x,y,6);
   if(seenBy(x,y))say(msg,'fire');
   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const i=idx(nx,ny),t=G.tile[i];
     if(t===T_WALL||t===T_STAIRS)continue;
+    if(t===T_ROCK){G.tile[i]=T_FLOOR;fxGlyph(nx,ny,'#','#9aa6b6',0,300);if(seenBy(nx,ny))say('The blast shatters a boulder.','dim');continue}
     if(t===T_WATER||t===T_ICE||t===T_SNOW||t===T_MUD||t===T_VINE_ICE){ignite(i);continue}
-    if(t===T_GRASS||t===T_OIL||t===T_VINE||t===T_SLICK)ignite(i);else{G.tile[i]=T_FIRE;G.fuel[i]=1;G.src[i]=0}
+    if(t===T_GRASS||t===T_OIL||t===T_VINE||t===T_SLICK||t===T_BUSH)ignite(i);else{G.tile[i]=T_FIRE;G.fuel[i]=1;G.src[i]=0}
     G.heat[i]=1;G.gas[i]=Math.max(G.gas[i],Math.min(0.7,G.gas[i]+0.25));
     fxGlyph(nx,ny,'@','#ffd27a',0,300);
     const e=occupant(nx,ny);if(e){if(e.isPlayer)G.cause='an explosion';hurt(e,8,'blast')}
@@ -985,6 +1008,10 @@ function playerMove(dx,dy){
   if(t===T_TREE){const ti=idx(nx,ny);G.fuel[ti]--;noise(nx,ny,4);fxGlyph(nx,ny,'/','#c08a50',0,200);
     if(G.fuel[ti]<=0){G.tile[ti]=T_DIRT;G.fuel[ti]=0;const L=mkItem('lumber');L.n=2+Math.floor(G.rng()*3);placeFloor(nx,ny,L);if(G.rng()<0.5)placeFloor(nx,ny,mkItem('dryGrass'));say(`Timber! The tree falls. (${L.n} lumber)`,'good')}
     else say(`You chop at the tree. (${G.fuel[ti]} more)`,'dim');endTurn();return}
+  if(t===T_ROCK){const ri=idx(nx,ny);
+    if(!(p.weapon&&WEAPONS[p.weapon.w].dig)){say('A boulder. Too heavy to move — good cover, or break it with a pickaxe.','dim');return}
+    G.tile[ri]=T_FLOOR;noise(nx,ny,5);fxGlyph(nx,ny,'#','#9aa6b6',0,300);
+    if(G.rng()<0.3){const o=mkItem('ironOre');placeFloor(nx,ny,o);say('You split the boulder. A lump of iron ore falls out!','good')}else say('You split the boulder apart.','dim');endTurn();return}
   if(t===T_WALL&&G.ore[idx(nx,ny)]&&!(p.weapon&&WEAPONS[p.weapon.w].dig)){say(`A vein of ${G.ore[idx(nx,ny)]===2?'mithril':'iron'} ore. You need a pickaxe to mine it.`,'dim');return}
   if(t===T_WALL&&p.weapon&&WEAPONS[p.weapon.w].dig&&!dx!==!dy&&nx>0&&ny>0&&nx<W-1&&ny<H-1){
     const oi=idx(nx,ny);if(G.ore[oi]){const o=mkItem(G.ore[oi]===2?'mithrilOre':'ironOre');o.n=G.ore[oi]===2?1:1+Math.floor(G.rng()*2);G.ore[oi]=0;G.tile[oi]=T_FLOOR;G.heat[oi]=G.heat[idx(p.x,p.y)];
@@ -996,8 +1023,10 @@ function playerMove(dx,dy){
     if(h01(P.seed,G.turn,idx(nx,ny),50)<0.5){placeFloor(nx,ny,mkItem('dryGrass'));say('Some dry grass falls loose.','dim')}endTurn();return}
   if(t===T_VINE_ICE){G.tile[idx(nx,ny)]=T_FLOOR;say('The frozen vines shatter!','ice');fxGlyph(nx,ny,'*','#bff6ff')}
   else if(t===T_WALL)return;
+  const wasBush=G.tile[idx(p.x,p.y)]===T_BUSH;
   p.x=nx;p.y=ny;
   if(t===T_FIRE)say('You step into the flames!','bad');
+  if(t===T_BUSH){noise(nx,ny,1);if(!wasBush)say('You crouch in the bush — hidden from anything more than a step away.','dim')}
   onEnter(p,dx,dy);
   pickupAt(p.x,p.y);
   if(G.tile[idx(p.x,p.y)]===T_STAIRS)say('Stairs down. Press STAIRS (>) to descend.','warn');
@@ -1020,7 +1049,7 @@ function rayPath(range,stopAtEnt){
   const p=G.player,[dx,dy]=p.face,path=[];let x=p.x,y=p.y,hit=null;
   for(let k=0;k<range;k++){
     if(dx&&dy&&!canDiag(x,y,dx,dy))break;
-    x+=dx;y+=dy;if(!inb(x,y)||G.tile[idx(x,y)]===T_WALL)break;
+    x+=dx;y+=dy;if(!inb(x,y)||G.tile[idx(x,y)]===T_WALL||G.tile[idx(x,y)]===T_ROCK)break;
     path.push([x,y]);const e=entAt(x,y);if(e&&stopAtEnt){hit=e;break}
     if(G.tile[idx(x,y)]===T_VINE||G.tile[idx(x,y)]===T_CAMP)break;
   }
@@ -1081,6 +1110,7 @@ function throwIt(it){
       if(t===T_FIRE){explode(x,y,'The oil catches!');continue}
       if([T_FLOOR,T_GRASS,T_ASH,T_DIRT,T_MUD,T_SNOW].includes(t))G.tile[i]=T_OIL;if(t===T_ICE)G.tile[i]=T_SLICK}
     if(hit)hurt(hit,2,'you');return}
+  if(it.kind==='smokeJar'){say('The jar bursts — a wall of grey smoke rolls out.','dim');smokeScreen(lx,ly);return}
   if(it.kind==='miasma'){say('The jar shatters — a sickly cloud billows out.','warn');poisonCloud(lx,ly,2,1);if(hit)hurt(hit,2,'you');return}
   if(isBag(it)){say(`The ${d.name} bursts open!`,'warn');if(hit)hurt(hit,2,'you');scatter(lx,ly,it.items);return}
   if(it.kind==='seeds'){say('Grass sprouts instantly.','good');
@@ -1249,6 +1279,8 @@ function render(now){
         case T_SLICK:{b=0.55+0.4*h01(i,sx,sy,fr2);ramp=RAMP.slick;pal=G.stored[i]&&h01(i,sx,sy,fr)<0.3?PAL.fire:PAL.slick;if(G.stored[i])lit=true;break}
         case T_WATER:{const w=Math.sin(now*0.0025+x*0.9+y*0.45+sx*0.8-sy*0.3);b=0.45+0.3*w;ch=w>0.3?'~':w>-0.4?'-':'.';pal=PAL.water;break}
         case T_PIT:{if(sy===2){ch=sx===1?'#':'=';b=0.45+0.2*n;pal=PAL.logs}else if(sy===1&&G.heat[i]>0.4&&h01(i,sx,sy,fr2)<0.35){ch=sx===1?'.':',';b=0.5+0.3*h01(i,sx,sy,fr);pal=PAL.fire;lit=true}else{ch=sy===1?(sx===1?'o':' '):' ';b=0.3;pal=PAL.ash}break}
+        case T_BUSH:{const sway=h01(i,sx,sy,fr2)<0.12;ch=sy===2?(sx===1?'w':','):sy===0?(sx===1?'*':(n<0.5?'"':' ')):(sx===1?'%':'"');if(sway)ch='*';b=0.42+0.35*n;pal=PAL.leaf;break}
+        case T_ROCK:{ch=sy===0?(sx===1?'_':' '):sy===1?(sx===0?'(':sx===2?')':'#'):(sx===1?'#':'_');b=0.5+0.25*n-(sy===0?0.1:0);pal=PAL.face;break}
         case T_TREE:{if(sy===2){ch=sx===1?'|':(n<0.5?',':' ');b=0.5+0.3*n;pal=sx===1?PAL.logs:PAL.grass}else{const sway=h01(i,sx,sy,fr2)<0.15;ch=sy===0?(sx===1?'^':'%'):(sx===1?'&':'%');if(sway)ch='*';b=0.55+0.4*n;pal=PAL.leaf}break}
         case T_CAMP:{const f=h01(i,sx,sy,fr);if(sy===2){ch=sx===1?'#':'=';b=0.55+0.2*n;pal=PAL.logs}else{b=sy===1?0.65+0.35*f:0.35+0.5*f*(sx===1?1:0.5);ramp=RAMP.fire;pal=PAL.fire}lit=true;break}
         case T_FIRE:{const f=h01(i,sx,sy,fr);b=0.45+0.55*f-sy*0.08+(G.fuel[i]>1?0.1:0);ramp=RAMP.fire;pal=PAL.fire;lit=true;break}
@@ -1324,7 +1356,7 @@ function render(now){
 }
 // ---------------- minimap ----------------
 let mmCanvas=null,mmBig=false,mmRect=null;
-const MM_COL={[T_PIT]:[120,90,60],[T_TREE]:[40,110,50],[T_CAMP]:[255,176,70],[T_FLOOR]:[34,42,54],[T_GRASS]:[48,96,42],[T_WATER]:[30,84,140],[T_FIRE]:[255,123,46],[T_ASH]:[60,56,52],[T_OIL]:[96,60,140],[T_ICE]:[140,200,225],
+const MM_COL={[T_BUSH]:[50,120,58],[T_ROCK]:[120,128,140],[T_PIT]:[120,90,60],[T_TREE]:[40,110,50],[T_CAMP]:[255,176,70],[T_FLOOR]:[34,42,54],[T_GRASS]:[48,96,42],[T_WATER]:[30,84,140],[T_FIRE]:[255,123,46],[T_ASH]:[60,56,52],[T_OIL]:[96,60,140],[T_ICE]:[140,200,225],
   [T_STAIRS]:[190,246,255],[T_MUD]:[92,70,46],[T_DIRT]:[70,60,48],[T_VINE]:[40,120,60],[T_VINE_ICE]:[120,200,210],[T_GRATE]:[90,104,116],[T_SNOW]:[200,214,230],[T_SLICK]:[150,120,220]};
 function buildMinimap(){
   if(!G||!G.tile)return;
@@ -1362,7 +1394,9 @@ function loop(now){render(now);requestAnimationFrame(loop)}
 const $=s=>document.querySelector(s);
 function stateHash(){let h=2166136261;const mix=v=>{h^=v;h=Math.imul(h,16777619)};for(let i=0;i<G.tile.length;i++){mix(G.tile[i]);mix(Math.round(G.heat[i]*255))}for(const m of G.ents){mix(m.x);mix(m.y);mix(m.hp)}const p=G.player;mix(p.x);mix(p.y);mix(p.hp);return(h>>>0).toString(16).padStart(8,'0')}
 function stealthTag(){const l=playerLightLevel(),pct=Math.round(Math.min(1,l)*100),[lab,col]=l<0.15?['HIDDEN','#9be070']:l<0.45?['shadowed','#f0c060']:['visible','#ff7a6a'];
-  return `<span style="color:${col}">${G.torch===false?'◌':'◉'} ${lab} ${pct}%</span>`}
+  const watched=G.ents.filter(m=>!m.dead&&!m.npc&&G.vis[idx(m.x,m.y)]&&cheb(m.x,m.y,G.player.x,G.player.y)<=9);
+  const cover=watched.length&&watched.every(m=>!seesPlayer(m))?`<span style="color:#9be070">◆ in cover</span>`:'';
+  return `<span style="color:${col}">${G.torch===false?'◌':'◉'} ${lab} ${pct}%</span>${cover}`}
 function updateHUD(){
   const p=G.player,i=idx(p.x,p.y),t=G.tile[i];
   if(SB){
@@ -1614,12 +1648,12 @@ function showEnd(title,body){
 //  SANDBOX
 // ============================================================
 const BRUSHES=[
-  ['GROUND',[['t:1','floor'],['t:0','wall'],['t:2','grass'],['t:3','water'],['t:6','oil'],['t:7','ice'],['t:9','mud'],['t:10','dirt'],['t:11','vines'],['t:13','grate'],['t:14','snow'],['t:15','slick ice'],['t:5','ash'],['t:4','fire'],['t:16','campfire'],['t:17','tree'],['t:18','fire pit (out)'],['o:1','iron vein (on wall)'],['o:2','mithril vein (on wall)']]],
+  ['GROUND',[['t:1','floor'],['t:0','wall'],['t:2','grass'],['t:3','water'],['t:6','oil'],['t:7','ice'],['t:9','mud'],['t:10','dirt'],['t:11','vines'],['t:13','grate'],['t:14','snow'],['t:15','slick ice'],['t:5','ash'],['t:4','fire'],['t:16','campfire'],['t:17','tree'],['t:19','bush'],['t:20','boulder'],['t:18','fire pit (out)'],['o:1','iron vein (on wall)'],['o:2','mithril vein (on wall)']]],
   ['AIR & ENERGY',[['a:smoke','smoke'],['a:pois','poison'],['a:hot','heat'],['a:cold','cold'],['a:zap','lightning']]],
   ['CREATURES',[...Object.keys(MON).map(k=>['m:'+k,MON[k].name]),['npc','blacksmith'],['erase','erase thing']]],
   ['ITEMS',Object.keys(ITEMS).map(k=>['i:'+k,ITEMS[k].name])],
 ];
-const BRUSH_COL={'t:18':'#c08a50','o:1':'#d08a5a','o:2':'#9fe8ff','t:17':'#4fb060','t:16':'#ffb050','t:0':'#8a96a8','t:1':'#5a6575','t:2':'#7fd060','t:3':'#4aa8ff','t:4':'#ff7b2e','t:5':'#8a8078','t:6':'#b07cff','t:7':'#9fe8ff','t:9':'#a07848','t:10':'#b09a78','t:11':'#4fc060','t:13':'#9aa6b6','t:14':'#f0f6ff','t:15':'#c9a8ff',
+const BRUSH_COL={'t:19':'#5fbf60','t:20':'#a0aab8','t:18':'#c08a50','o:1':'#d08a5a','o:2':'#9fe8ff','t:17':'#4fb060','t:16':'#ffb050','t:0':'#8a96a8','t:1':'#5a6575','t:2':'#7fd060','t:3':'#4aa8ff','t:4':'#ff7b2e','t:5':'#8a8078','t:6':'#b07cff','t:7':'#9fe8ff','t:9':'#a07848','t:10':'#b09a78','t:11':'#4fc060','t:13':'#9aa6b6','t:14':'#f0f6ff','t:15':'#c9a8ff',
   'a:smoke':'#9aa0a8','a:pois':'#c8f040','a:hot':'#ff6a3a','a:cold':'#7fb8ff','a:zap':'#fff27a',npc:'#ffb050',erase:'#ff6a5a'};
 function brushLabel(b){for(const [,l] of BRUSHES)for(const [k,n] of l)if(k===b)return n;return b}
 function brushColor(b){if(BRUSH_COL[b])return BRUSH_COL[b];if(b.startsWith('m:'))return MON[b.slice(2)].color;if(b.startsWith('i:'))return ITEMS[b.slice(2)].color;return '#cfd6e0'}
@@ -1638,7 +1672,7 @@ function enterSandbox(){
   setActs();computeView();updateHUD();
 }
 function buildArena(){
-  allocLayers();G.npc=null;G.flies=[];
+  allocLayers();G.npc=null;G.flies=[];G.smokes=[];
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=idx(x,y);G.tile[i]=x===0||y===0||x===W-1||y===H-1?T_WALL:T_FLOOR;G.roomIdx[i]=0}
   G.rooms=[{x:1,y:1,w:W-2,h:H-2,real:true,lit:false}];G.stairRoom=0;
 }
@@ -1701,7 +1735,7 @@ const TDESC={[T_WALL]:'Solid rock. A pickaxe can dig through it.',[T_FLOOR]:'Bar
   [T_FIRE]:'Burning! Hurts anything standing in it.',[T_ASH]:'Burnt ground. Regrows into grass; rain turns it to mud.',[T_OIL]:'Burns fast and chains to nearby oil. Freezes into slick ice.',
   [T_ICE]:'Walkable. Melts with heat — whoever stands on it drops into freezing water.',[T_STAIRS]:'Stairs leading down.',[T_MUD]:'Traps you for a turn. Bakes into dirt when hot.',
   [T_DIRT]:'Grass regrows quickly here.',[T_VINE]:'Blocks movement and sight. Hack through it or burn it fast.',[T_VINE_ICE]:'Frozen vines. They shatter if you walk into them.',
-  [T_GRATE]:'Metal. Conducts lightning and heat; scalding when hot.',[T_SNOW]:'Shows footprints. Melts into puddles.',[T_PIT]:'A put-out campfire. Dark and cold, but it keeps its fuel. Walk into it to relight it or add lumber; nearby fire can relight it too.',[T_TREE]:'A tree. Blocks movement and sight — good cover. Chop it down for lumber (3 swings, noisy). Burns for a long time.',[T_CAMP]:'A contained fire: light, heat and somewhere to cook. You heal every turn beside it. Walk into it with lumber to add fuel. Rain or frost puts it out; its embers can catch nearby grass.',[T_SLICK]:'Frozen oil. You slide across it until you hit something.'};
+  [T_GRATE]:'Metal. Conducts lightning and heat; scalding when hot.',[T_SNOW]:'Shows footprints. Melts into puddles.',[T_PIT]:'A put-out campfire. Dark and cold, but it keeps its fuel. Walk into it to relight it or add lumber; nearby fire can relight it too.',[T_BUSH]:'A thick bush. Walk into it to hide — nothing more than a step away can see you inside, but you can still watch out. Rustles a little. Burns fast.',[T_ROCK]:'A boulder. Solid cover: blocks movement and sight. Hug it to peek past while staying hidden. A pickaxe or a blast breaks it.',[T_TREE]:'A tree. Blocks movement and sight — good cover. Chop it down for lumber (3 swings, noisy). Burns for a long time.',[T_CAMP]:'A contained fire: light, heat and somewhere to cook. You heal every turn beside it. Walk into it with lumber to add fuel. Rain or frost puts it out; its embers can catch nearby grass.',[T_SLICK]:'Frozen oil. You slide across it until you hit something.'};
 MON.rat.desc='Scurries about; only fights when you come close.';MON.goblin.desc='Hunts you on sight.';MON.beetle.desc='Grazes on grass and chews through vines, leaving bare dirt.';
 MON.slime.desc='Splits in two when hit. Heals and multiplies in water.';MON.ember.desc='Leaves fire wherever it walks through grass or oil. Drawn to fireflies; water hurts it.';
 MON.toad.desc='Belches clouds of poison gas. Immune to poison.';MON.thief.desc='Steals an item and flees at double speed. Drops loot if it runs through fire.';
@@ -1762,7 +1796,7 @@ function updateLook(){
 
 // ---------------- AUTO-EXPLORE ----------------
 let exploring=false,expTimer=null,expHp=0,expStall=0;
-function expCost(i){const t=G.tile[i];if(t===T_WALL||t===T_CAMP||t===T_TREE||t===T_PIT||!G.seen[i])return -1;
+function expCost(i){const t=G.tile[i];if(t===T_WALL||t===T_ROCK||t===T_CAMP||t===T_TREE||t===T_PIT||!G.seen[i])return -1;
   if(t===T_FIRE||(G.elec[i]&&(t===T_WATER||t===T_GRATE))||G.pois[i]>0.2||(t===T_GRATE&&G.heat[i]>0.55)||G.heat[i]>0.8)return -1;
   return t===T_MUD?4:(t===T_VINE||t===T_VINE_ICE)?3:t===T_SLICK?8:1}
 function pathField(){

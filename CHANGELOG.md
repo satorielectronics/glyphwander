@@ -4,6 +4,14 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.14.0 — Cover
+- Cover is one-way: you can peek past a tree, bush or boulder right next to you, but enemies can't see through it.
+  Hug cover between you and an enemy to watch it without being seen. The HUD shows ◆ in cover when no enemy in view can see you.
+- Bushes: walkable thickets. Nothing more than a step away can see you inside one, but you can still see out. They rustle a little and burn fast.
+- Boulders: solid cover in rooms. A pickaxe splits them (sometimes with iron ore inside); explosions shatter them.
+- Smoke Jar: throw it for a smoke screen (about 9 turns) that blocks all sight through it, both ways.
+- Floors now generate bush thickets and boulders, so floor layouts differ from earlier versions.
+
 ## v0.13.2 — Bind from the item menu
 - Every item in your pack or a bag has a BIND option: pick a number-row slot (press 1–0), see what each slot holds,
   replace a slot or unbind. The button shows the current key, e.g. BIND [4].

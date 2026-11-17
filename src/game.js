@@ -366,7 +366,7 @@ function computeView(){
     if(d<=(tr?1.5:2.5))L=Math.max(L,tr?0.22:0.16);   // you can always make out what's close; eyes adjust without a torch
     if(L<=0.04)continue;
     if(!los(p.x,p.y,x,y))continue;
-    L*=1-Math.min(0.6,(G.gas[i]+G.pois[i])*0.6);
+    L=Math.max(L*(1-Math.min(0.45,(G.gas[i]+G.pois[i])*0.45)),G.env[i]*0.85);
     G.vis[i]=1;G.seen[i]=1;G.light[i]=Math.max(L,0.08);
   }
   // silhouettes: creatures in line of sight within 8 tiles can be made out even in darkness
@@ -620,7 +620,7 @@ function explode(x,y,msg){
     if(t===T_WALL||t===T_STAIRS)continue;
     if(t===T_WATER||t===T_ICE||t===T_SNOW||t===T_MUD||t===T_VINE_ICE){ignite(i);continue}
     if(t===T_GRASS||t===T_OIL||t===T_VINE||t===T_SLICK)ignite(i);else{G.tile[i]=T_FIRE;G.fuel[i]=1;G.src[i]=0}
-    G.heat[i]=1;G.gas[i]=Math.min(1,G.gas[i]+0.5);
+    G.heat[i]=1;G.gas[i]=Math.max(G.gas[i],Math.min(0.7,G.gas[i]+0.25));
     fxGlyph(nx,ny,'@','#ffd27a',0,300);
     const e=occupant(nx,ny);if(e){if(e.isPlayer)G.cause='an explosion';hurt(e,8,'blast')}
   }
@@ -1058,7 +1058,7 @@ function hslPal(h,s,l0,l1){const a=[];for(let k=0;k<10;k++)a.push(`hsl(${h},${s}
 const PAL={
   face:hslPal(215,16,10,78),top:hslPal(218,14,7,42),floor:hslPal(220,12,8,34),grass:hslPal(105,48,9,58),
   water:hslPal(205,72,12,62),ash:hslPal(30,6,8,36),oil:hslPal(278,45,10,58),ice:hslPal(188,80,22,86),
-  mem:hslPal(225,22,6,26),leaf:hslPal(120,50,12,52),ironOre:hslPal(22,62,22,64),mithOre:hslPal(188,85,30,82),logs:hslPal(28,55,14,55),rim:hslPal(205,30,20,86),rimMem:hslPal(215,22,10,40),smoke:hslPal(220,8,14,52),pois:hslPal(72,95,18,68),
+  mem:hslPal(225,22,6,26),leaf:hslPal(120,50,12,52),ironOre:hslPal(22,62,22,64),mithOre:hslPal(188,85,30,82),logs:hslPal(28,55,14,55),rim:hslPal(205,30,20,86),rimMem:hslPal(215,22,10,40),smoke:hslPal(220,8,14,52),smokeLit:hslPal(28,32,20,66),pois:hslPal(72,95,18,68),
   mud:hslPal(28,42,8,42),dirt:hslPal(35,25,8,40),vine:hslPal(128,55,10,55),vineIce:hslPal(185,55,22,82),
   grate:hslPal(205,12,12,62),hot:hslPal(12,95,18,62),snow:hslPal(210,25,35,96),slick:hslPal(262,60,25,82),
   fire:Array.from({length:10},(_,k)=>`hsl(${(k*6).toFixed(0)},100%,${(32+k*5).toFixed(0)}%)`),
@@ -1103,7 +1103,7 @@ function render(now){
     for(let sy=0;sy<SY;sy++)for(let sx=0;sx<SX;sx++){
       const n=h01(i,sx,sy,7);let b,ramp,pal,ch=null,lit=false;
       if(poi>0.06&&h01(i,sx*3+sy,fr2,17)<poi*0.9+0.1){b=0.5+poi*0.5;ramp=RAMP.pois;pal=PAL.pois;lit=true}
-      else if(gas>0.06&&h01(i,sx*3+sy,fr2,11)<gas*0.85){b=0.35+gas*0.6;ramp=RAMP.smoke;pal=PAL.smoke}
+      else if(gas>0.06&&h01(i,sx*3+sy,fr2,11)<(t===T_FIRE||t===T_CAMP?Math.max(0,gas-0.35)*0.6:gas*0.85)){const glow=G.env?G.env[i]:0;b=Math.max(0.35+gas*0.6,glow*0.9);ramp=RAMP.smoke;pal=glow>0.45?PAL.smokeLit:PAL.smoke;lit=glow>0.45}
       else if(el){b=0.6+0.4*h01(i,sx,sy,fr);ch=b>0.85?'ϟ':t===T_GRATE?'#':'≈';pal=PAL.elec;lit=true}
       else switch(t){
         case T_WALL:
@@ -1764,6 +1764,8 @@ function modalKey(e){
     if(/^[1-9]$/.test(k)&&!e.code.startsWith('Numpad')){const q=sheet.querySelector(`[data-op="q${+k-1}"]`);if(q){e.preventDefault();q.click()}return}
     const d=keyDir(e);if(d&&(d[0]||d[1])){e.preventDefault();const b=sheet.querySelector(`[data-op="d${(d[1]+1)*3+d[0]+1}"]`);if(b)b.click();return}
     if(k==='Enter'||(d&&!d[0]&&!d[1])){e.preventDefault();sheet.querySelector('[data-op="fire"]').click()}return}
+  // Tab toggles the pack: in the pack or a bag view it closes it
+  if(k==='Tab'&&!e.shiftKey&&!typing&&(sheet.querySelector('.selrow')&&/^PACK/.test(kbScreen())||invBag)){e.preventDefault();invBag=null;closeModal();return}
   // letter hotkeys on buttons
   if(k.length===1&&!typing&&!e.ctrlKey&&!e.metaKey){const hk=sheet.querySelector(`button[data-key="${k.toLowerCase()}"]:not(:disabled)`);if(hk){e.preventDefault();hk.click();return}}
   // lists with a selection (pack, bags): up/down select, left/right pick a button, Enter does it
@@ -1786,10 +1788,10 @@ function modalKey(e){
 }
 function openHelp(){
   const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals)'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
-    ['Items (pack)','I — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · Z zap (in a bag) · S split · M combine · C cook · A cook all · B build fire'],
+    ['Items (pack)','Tab or I (Tab again closes) — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · Z zap (in a bag) · S split · M combine · C cook · A cook all · B build fire'],
     ['Aim a throw or zap','direction keys turn, Shift+← → (or Shift+numpad 4 / 6, or − +) set throw distance, 1–9 picks a visible enemy, Enter confirms, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
-    ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
-    ['Sandbox','X toggle · M brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
+    ['Explore','O or numpad 0'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','M (Esc closes the big map)'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
+    ['Sandbox','X toggle · B brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
   openModal(`<h3>KEYBOARD</h3>`+L.map(([a,b])=>`<div class="prm" style="grid-template-columns:150px 1fr"><b style="color:#fff">${a}</b><span style="text-align:left;color:#9aa6b6">${b}</span></div>`).join('')+`<div class="btns"><button data-op="close">CLOSE</button></div>`);
   bindOps({close:closeModal})}
 function paintFacing(){if(!SB)return;const p=G.player,x=p.x+p.face[0],y=p.y+p.face[1],single=/^(m:|i:|npc)/.test(SB.brush),rad=single?0:SB.size-1,st={cells:new Set()};
@@ -1841,7 +1843,7 @@ const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],
 window.addEventListener('keydown',e=>{
   kbMode=true;
   if(modalOpen()){modalKey(e);return}
-  if(e.key==='Escape'){setFace(false);exitLook();stopExplore();return}
+  if(e.key==='Escape'){setFace(false);exitLook();stopExplore();mmBig=false;return}
   if(e.target.tagName==='INPUT')return;
   if(e.key==='?'){e.preventDefault();openHelp();return}
   if(SB&&e.key==='g'){e.preventDefault();paintFacing();return}
@@ -1853,9 +1855,10 @@ window.addEventListener('keydown',e=>{
   if(key==='l'||key==='v'){doAction('look');return}if(key==='k'){doAction('save');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
   if(key==='f'){doAction('face');return}
   stopExplore();if(lookMode)exitLook();
-  if(e.key==='Tab'){e.preventDefault();mmBig=!mmBig;return}
+  if(e.key==='Tab'){e.preventDefault();openInv();return}
+  if(key==='m'){e.preventDefault();mmBig=!mmBig;return}
   if(key==='i'){e.preventDefault();openInv()}else if(key==='f')doAction('face');else if(key==='>'||key==='Enter'){e.preventDefault();descend()}else if(key==='p')openParams();
-  else if(key==='x')SB?exitSandbox():enterSandbox();else if(key==='r'&&SB)toggleRun();else if(key==='m'&&SB)openBrush();
+  else if(key==='x')SB?exitSandbox():enterSandbox();else if(key==='r'&&SB)toggleRun();else if(key==='b'&&SB)openBrush();
 });
 window.addEventListener('resize',resize);
 

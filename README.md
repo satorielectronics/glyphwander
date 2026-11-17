@@ -40,6 +40,7 @@ Every build has a `release/vX.Y.Z` branch. See `CHANGELOG.md` for what each one 
 | `release/v0.11.1` | Aimed zaps, zapping from bags, numpad 0 explores |
 | `release/v0.11.2` | Choose how far to throw |
 | `release/v0.11.3` | Shift+arrows set throw distance |
+| `release/v0.11.4` | Explosion smoke fix, Tab for items, M for map |
 
 ## License
 GPL-3.0 — see `LICENSE`.

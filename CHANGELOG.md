@@ -4,6 +4,14 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.11.4 — Explosion smoke fix, Tab for items, M for map
+- Fix: an explosion in an already smoky fire could push the smoke past the see-through limit,
+  hiding the area behind it for a turn (and blocking the fire's light). A blast now adds a
+  smaller puff that can't do that on its own, fire glows through smoke, smoke near flames is
+  lit warm instead of drawn as dark holes, and smoke dims your view less where fire lights it.
+- Tab opens ITEMS (Tab again closes the pack or a bag view; I still works).
+- M toggles the full map (Esc also closes it). In the sandbox the brush moved from M to B.
+
 ## v0.11.3 — Shift+arrows set throw distance
 - On the throw aim screen, Shift+← / Shift+→ (and Shift+numpad 4 / 6) shorten or lengthen the throw.
   Works with NumLock on, where the browser reports Shift+numpad 4/6 as plain arrows.

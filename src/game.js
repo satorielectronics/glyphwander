@@ -9,8 +9,8 @@
 // ============================================================
 const W=48,H=32;
 const T_WALL=0,T_FLOOR=1,T_GRASS=2,T_WATER=3,T_FIRE=4,T_ASH=5,T_OIL=6,T_ICE=7,T_STAIRS=8,
-      T_MUD=9,T_DIRT=10,T_VINE=11,T_VINE_ICE=12,T_GRATE=13,T_SNOW=14,T_SLICK=15,T_CAMP=16;
-const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs','mud','dirt','vines','frozen vines','grate','snow','slick ice','campfire'];
+      T_MUD=9,T_DIRT=10,T_VINE=11,T_VINE_ICE=12,T_GRATE=13,T_SNOW=14,T_SLICK=15,T_CAMP=16,T_TREE=17;
+const TNAME=['wall','floor','grass','water','fire','ash','oil','ice','stairs','mud','dirt','vines','frozen vines','grate','snow','slick ice','campfire','tree'];
 const DIRS8=[[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
 const DIRS4=[[0,-1],[1,0],[0,1],[-1,0]];
 const ARROWS={'0,-1':'↑','1,-1':'↗','1,0':'→','1,1':'↘','0,1':'↓','-1,1':'↙','-1,0':'←','-1,-1':'↖'};
@@ -69,7 +69,7 @@ const PARAM_DEFS=[
 ];
 
 // ---------------- deterministic randomness ----------------
-function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function mulberry32(a){const f=function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};f.get=()=>a|0;f.set=v=>{a=v|0};return f}
 function hashU(a,b,c,d){let h=(0x9e3779b9^(a|0))>>>0;h=Math.imul(h^(b|0),0x85ebca6b);h^=h>>>13;h=Math.imul(h^(c|0),0xc2b2ae35);h^=h>>>16;h=Math.imul(h^(d|0),0x27d4eb2f);h^=h>>>15;h=Math.imul(h,0x165667b1);h^=h>>>16;return h>>>0}
 function h01(a,b,c,d){return hashU(a,b,c,d)/4294967296}
 const idx=(x,y)=>y*W+x, inb=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
@@ -101,6 +101,11 @@ const ITEMS={
   coldbox:{ch:'(',color:'#9aa6b6',name:'Iron Box',bag:3,fireproof:true,desc:'Holds 3 items. Fireproof: it never burns or spills in fire. Food inside never rots.'},
   gold:{ch:'$',color:'#ffd84a',name:'Gold',desc:'Spend it at a blacksmith.'},
   lumber:{ch:'=',color:'#c08a50',name:'Lumber',desc:'Firewood. With some Dry Grass, BUILD a campfire in front of you. Walk into a campfire (or throw lumber on it) to add fuel. Lumber lying in fire becomes a campfire.'},
+  ironOre:{ch:'*',color:'#d08a5a',name:'Iron Ore',desc:'Rough iron, mined from rusty veins with a pickaxe. A blacksmith smelts 2 ore into 1 bar.'},
+  mithrilOre:{ch:'*',color:'#9fe8ff',name:'Mithril Ore',desc:'Rare, glittering ore from deeper floors. A blacksmith smelts 2 ore into 1 bar.'},
+  ironBar:{ch:'=',color:'#c8d0d8',name:'Iron Bar',desc:'Smelted iron. Trade bars to a blacksmith for powerful gear.'},
+  mithrilBar:{ch:'=',color:'#7fe8ff',name:'Mithril Bar',desc:'Smelted mithril. The finest things a blacksmith makes need it.'},
+  tainted:{ch:'%',color:'#b88ad8',name:'Tainted Jerky',use:true,desc:'Rotten meat, cooked. Filling (+30), but whoever eats it is paralyzed for 5 turns. Throw it at an enemy and it gulps it down and freezes up.'},
   dryGrass:{ch:'"',color:'#d8c860',name:'Dry Grass',desc:'Plant matter for kindling. With Lumber, BUILD a campfire in front of you. You often get some when hacking through vines. Burns away in fire.'},
   reveal:{ch:'?',color:'#fff7c0',name:'Dawn Scroll',use:true,desc:'Floods the whole floor with light: the entire map is revealed and every creature and item on it becomes visible.'},
   storm:{ch:'?',color:'#8fb0ff',name:'Storm Scroll',use:true,desc:'A thunderstorm breaks over the room you are in for 40 turns: rain douses fire, cools and floods the ground, and lightning strikes at random — drawn to metal grates and creatures, chained through water. Including you.'},
@@ -114,7 +119,7 @@ const ITEMS={
 };
 ITEMS.inferno.bagT=true;ITEMS.inferno.desc+=' Read onto a bag: cooks the food inside, burns paper and herbs, and detonates any jars (on you).';
 ITEMS.rain.bagT=true;ITEMS.rain.desc+=' Read onto a bag: seeds inside sprout into herbs.';
-const WEAPONS={dagger:{name:'Dagger',atk:2},club:{name:'Club',atk:3},katana:{name:'Katana',atk:5},pickaxe:{name:'Pickaxe',atk:2,dig:true}};
+const WEAPONS={dagger:{name:'Dagger',atk:2},club:{name:'Club',atk:3},katana:{name:'Katana',atk:5},pickaxe:{name:'Pickaxe',atk:2,dig:true},greatsword:{name:'Greatsword',atk:7},mithril:{name:'Mithril Edge',atk:9}};
 const SEALS={fire:{tag:'F',name:'flame'},ice:{tag:'I',name:'frost'},bolt:{tag:'T',name:'thunder'},venom:{tag:'V',name:'venom'}};
 const ITEM_W=[['onigiri',13],['herb',11],['meat',3],['fireStaff',6],['iceStaff',5],['boltStaff',5],['galeStaff',5],['oilJar',8],['miasma',5],['seeds',6],['inferno',4],['rain',4],['blizzard',4],
   ['weapon',6],['pouch',3],['satchel',2],['coldbox',2],['honing',5],['flameSeal',2],['frostSeal',2],['thunderSeal',2],['venomSeal',2],['smelting',2],['recharge',2],['lumber',6],['dryGrass',6],['reveal',3],['storm',3]];
@@ -135,7 +140,7 @@ const FINAL_FLOOR=10;
 let G=null, faceMode=false, SB=null;
 
 function pickW(list,r){let s=0;for(const [,w] of list)s+=w;let v=r*s;for(const [k,w] of list){if((v-=w)<0)return k}return list[0][0]}
-const STACK={lumber:20,dryGrass:20,seeds:10,herb:10};
+const STACK={lumber:20,dryGrass:20,seeds:10,herb:10,ironOre:10,mithrilOre:10,ironBar:10,mithrilBar:10};
 const qty=it=>it.n||1;
 // merge `it` into same-kind stacks of `list`; returns what is left over (or null)
 function mergeInto(list,it){const max=STACK[it.kind];if(!max)return it;
@@ -164,7 +169,7 @@ function itemName(it){
   return ITEMS[it.kind].name+(it.charges!=null?` [${it.charges}]`:'')+(it.frozen?' (frozen)':'')}
 function atkOf(e){return e.isPlayer&&e.weapon?e.atk+WEAPONS[e.weapon.w].atk+e.weapon.plus:e.atk}
 function mkMonster(kind,x,y){const d=MON[kind],dp=G.depth-1,hp=d.hp+Math.floor(dp*1.2);
-  const m=Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,
+  const m=Object.assign({},d,{kind,x,y,hp,maxhp:hp,atk:d.atk+Math.floor(dp/3),frozen:0,stuck:0,panic:0,puffCD:2,alert:0,sus:0,search:0,para:0,
     dir:Math.floor(G.rng()*8),tx:null,ty:null,id:++G.uid,face:null});m.face=DIRS8[m.dir];return m}
 
 // ---------------- run / floor setup ----------------
@@ -173,7 +178,7 @@ function newRun(seed){
   G={depth:0,turn:0,uid:0,over:false,log:[],fx:[],flies:[],
      player:{x:0,y:0,ch:'@',name:'you',hp:24,maxhp:24,atk:2,def:1,lv:1,xp:0,full:100,face:[0,1],inv:[],isPlayer:true,stuck:0,gold:0,weapon:null},npc:null};
   nextFloor();
-  const dg=mkWeapon('dagger');G.player.inv.push(dg,mkItem('onigiri'),mkItem('fireStaff'),mkItem('oilJar'),mkItem('galeStaff'),mkItem('pouch'));G.player.weapon=dg;
+  const dg=mkWeapon('dagger');G.player.inv.push(dg,mkItem('onigiri'),mkItem('fireStaff'),mkItem('oilJar'),mkItem('galeStaff'),mkItem('pouch'));G.player.weapon=dg;autosave();
   say('Shift+dir or FACE to turn without moving. Staffs & throws fire where @ faces. Press ? for keyboard controls.','dim');
   updateHUD();
 }
@@ -203,12 +208,13 @@ function nextFloor(){
   say(`B${G.depth}F — ${G.night?'Night falls. Only fire and fireflies give light.':flavor[hashU(P.seed,G.depth,3,3)%flavor.length]}`,'warn');
   camX=p.x;camY=p.y;
   computeView();
+  autosave();
 }
 function allocLayers(){const N=W*H;
   G.tile=new Uint8Array(N);G.fuel=new Int16Array(N);G.gas=new Float32Array(N);G.pois=new Float32Array(N);
   G.heat=new Float32Array(N).fill(G.night?0.15:P.ambient);G.elec=new Uint8Array(N);G.src=new Uint8Array(N);G.stored=new Uint8Array(N);
   G.prints=new Uint8Array(N);G.seen=new Uint8Array(N);G.vis=new Uint8Array(N);G.light=new Float32Array(N);
-  G.roomIdx=new Int16Array(N).fill(-1);G.ents=[];G.floorItems=[];}
+  G.roomIdx=new Int16Array(N).fill(-1);G.ore=new Uint8Array(N);G.ents=[];G.floorItems=[];}
 function genFloor(){
   const R=mulberry32(hashU(P.seed,G.depth,1,0)),N=W*H;
   allocLayers();
@@ -257,6 +263,22 @@ function genFloor(){
   G.stairRoom=realIdx[Math.floor(R()*realIdx.length)];
   const sc=randomRoomCell(c=>[T_FLOOR,T_GRASS,T_DIRT].includes(G.tile[c]),-1,G.stairRoom,R);
   G.tile[sc]=T_STAIRS;
+  genTreesAndOre();
+}
+function genTreesAndOre(){
+  const R=mulberry32(hashU(P.seed,G.depth,2,0));
+  // trees: isolated (nothing solid around them) so they never cut a room off
+  for(const r of G.rooms){if(!r.real||R()>=0.45)continue;const n=2+Math.floor(R()*5);
+    for(let k=0;k<n*4&&k<60;k++){const x=r.x+1+Math.floor(R()*Math.max(1,r.w-2)),y=r.y+1+Math.floor(R()*Math.max(1,r.h-2)),i=idx(x,y);
+      if(![T_FLOOR,T_GRASS,T_DIRT].includes(G.tile[i]))continue;let ok=true;
+      for(const [dx,dy] of DIRS8){const t=G.tile[idx(x+dx,y+dy)];if(t===T_WALL||t===T_TREE||t===T_STAIRS||t===T_VINE){ok=false;break}}
+      if(ok){G.tile[i]=T_TREE;G.fuel[i]=3}}}
+  // ore veins in walls that face open ground
+  const face=[];for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const i=idx(x,y);if(G.tile[i]!==T_WALL)continue;if(DIRS4.some(([dx,dy])=>passTile(G.tile[idx(x+dx,y+dy)])||G.tile[idx(x+dx,y+dy)]===T_TREE))face.push(i)}
+  const vein=(kind,len)=>{let i=face[Math.floor(R()*face.length)];for(let k=0;k<len;k++){G.ore[i]=kind;const x=i%W,y=(i/W)|0;
+    const nb=DIRS4.map(([dx,dy])=>idx(x+dx,y+dy)).filter(j=>G.tile[j]===T_WALL&&!G.ore[j]&&(j%W)>0&&(j%W)<W-1&&((j/W)|0)>0&&((j/W)|0)<H-1);if(!nb.length)break;i=nb[Math.floor(R()*nb.length)]}};
+  if(face.length){const iv=2+Math.floor(R()*3);for(let k=0;k<iv;k++)vein(1,2+Math.floor(R()*3));
+    if(G.depth>=3){const mv=Math.floor(R()*2)+(G.depth>=6?1:0);for(let k=0;k<mv;k++)vein(2,1+Math.floor(R()*2))}}
 }
 function wallCount8(x,y){let n=0;for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(!inb(nx,ny)||G.tile[idx(nx,ny)]===T_WALL)n++}return n}
 function randomRoomCell(ok,avoidRoom=-1,onlyRoom=-1,R=G.rng){
@@ -303,12 +325,12 @@ function buildCampfire(){
   fxGlyph(x,y,'^','#ffb050',0,500);return true}
 
 // ---------------- queries ----------------
-function passTile(t){return t!==T_WALL&&t!==T_VINE&&t!==T_VINE_ICE&&t!==T_CAMP}
+function passTile(t){return t!==T_WALL&&t!==T_VINE&&t!==T_VINE_ICE&&t!==T_CAMP&&t!==T_TREE}
 function entAt(x,y){if(!G.ents)return null;for(const e of G.ents)if(!e.dead&&e.x===x&&e.y===y)return e;return null}
 function occupant(x,y){return entAt(x,y)||(G.player.x===x&&G.player.y===y?G.player:null)||(G.npc&&G.npc.x===x&&G.npc.y===y?G.npc:null)}
 function canDiag(x,y,dx,dy){if(dx&&dy)return G.tile[idx(x+dx,y)]!==T_WALL&&G.tile[idx(x,y+dy)]!==T_WALL;return true}
 function walkable(x,y){return inb(x,y)&&passTile(G.tile[idx(x,y)])}
-function blocksSight(i){const t=G.tile[i];return t===T_WALL||t===T_VINE||t===T_VINE_ICE||G.gas[i]+G.pois[i]>0.85}
+function blocksSight(i){const t=G.tile[i];return t===T_WALL||t===T_TREE||t===T_VINE||t===T_VINE_ICE||G.gas[i]+G.pois[i]>0.85}
 function los(x0,y0,x1,y1){let dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx+dy,x=x0,y=y0;
   while(!(x===x1&&y===y1)){const e2=2*err;if(e2>=dy){err+=dy;x+=sx}if(e2<=dx){err+=dx;y+=sy}
     if(x===x1&&y===y1)return true;if(blocksSight(y*W+x))return false}return true}
@@ -397,7 +419,7 @@ function attack(a,b){
   const R=G.rng;
   let mult=1;
   if(a.isPlayer&&!b.isPlayer&&!b.npc){if(!b.face)b.face=DIRS8[b.dir||0];
-    const behind=facingDot(b,a.x,a.y)<-0.35,unaware=!(b.alert>0);
+    const behind=facingDot(b,a.x,a.y)<-0.35,unaware=!(b.alert>0)||b.para>0;
     mult=behind&&unaware?3:behind||unaware?2:1;
     b.alert=8;b.sus=0;b.tx=a.x;b.ty=a.y;
     noise(a.x,a.y,4)}
@@ -459,6 +481,7 @@ function ignite(i){const t=G.tile[i];
   if(t===T_GRASS){G.tile[i]=T_FIRE;G.fuel[i]=P.burnTime;G.src[i]=1}
   else if(t===T_OIL||t===T_SLICK){G.tile[i]=T_FIRE;G.fuel[i]=2;G.src[i]=2;G.stored[i]=0}
   else if(t===T_VINE){G.tile[i]=T_FIRE;G.fuel[i]=2;G.src[i]=3}
+  else if(t===T_TREE){G.tile[i]=T_FIRE;G.fuel[i]=10;G.src[i]=4}
   else if(t===T_VINE_ICE)G.tile[i]=T_VINE;
   else if(t===T_ICE||t===T_SNOW){G.tile[i]=T_WATER;plunge(i)}
   else if(t===T_MUD)G.tile[i]=T_DIRT;
@@ -512,19 +535,19 @@ function worldStep(){
       if(!inb(nx,ny)){if(!(dx&&dy))wallO++;continue}
       const nc=t[ny*W+nx],orth=!(dx&&dy);
       if(orth){if(nc===T_GRASS)grassN++;if(nc===T_VINE)vineN++;if(nc===T_WALL)wallO++}
-      if(nc===T_CAMP&&(c===T_GRASS||c===T_OIL||c===T_VINE)){fireN++;q*=1-clamp((c===T_OIL?P.oilSpread:P.fireSpread)*0.08*(orth?1:0.6),0,1);continue}
+      if(nc===T_CAMP&&(c===T_GRASS||c===T_OIL||c===T_VINE||c===T_TREE)){fireN++;q*=1-clamp((c===T_OIL?P.oilSpread:P.fireSpread)*0.08*(orth?1:0.6),0,1);continue}
       if(nc!==T_FIRE)continue;fireN++;
-      if(c===T_GRASS||c===T_OIL||c===T_VINE){
+      if(c===T_GRASS||c===T_OIL||c===T_VINE||c===T_TREE){
         const along=(-dx*wx-dy*wy)/Math.hypot(dx,dy);
-        let base=c===T_OIL?P.oilSpread:c===T_VINE?P.vineSpread:P.fireSpread*(0.6+nh[i]*0.8);
+        let base=c===T_OIL?P.oilSpread:c===T_VINE?P.vineSpread:c===T_TREE?P.fireSpread*0.45:P.fireSpread*(0.6+nh[i]*0.8);
         q*=1-clamp(base*(orth?1:0.7)*(1+ws*along*1.5),0,1)}
     }
     const r=h01(S,T,i,1),hh=nh[i];
     switch(c){
       case T_CAMP: nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0;if(G.vis[i])say('A campfire burns down to embers.','dim')}break;
       case T_FIRE: nf[i]=f[i]-1;if(nf[i]<=0){nt[i]=T_ASH;nf[i]=0;if(G.src[i]===1)burntGrass.push(i)}break;
-      case T_GRASS:case T_OIL:case T_VINE:
-        if((fireN&&r<1-q)||(hh>P.ignitePoint&&h01(S,T,i,6)<0.35)){nt[i]=T_FIRE;nf[i]=c===T_GRASS?P.burnTime:2;G.src[i]=c===T_GRASS?1:c===T_OIL?2:3}
+      case T_GRASS:case T_OIL:case T_VINE:case T_TREE:
+        if((fireN&&r<1-q)||(hh>P.ignitePoint&&h01(S,T,i,6)<0.35)){nt[i]=T_FIRE;nf[i]=c===T_GRASS?P.burnTime:c===T_TREE?10:2;G.src[i]=c===T_GRASS?1:c===T_OIL?2:c===T_TREE?4:3;if(c===T_TREE&&G.vis[i])say('A tree goes up in flames!','fire')}
         else if(c===T_GRASS&&wallO>=2&&h01(S,T,i,7)<P.vineGrowth*0.5&&!occupant(x,y))nt[i]=T_VINE;
         break;
       case T_ASH: if(r<P.regrow)nt[i]=T_GRASS;break;
@@ -571,7 +594,7 @@ function worldStep(){
     if(isBag(fi.it)&&ITEMS[k].fireproof)continue;
     if(isBag(fi.it)){G.floorItems.splice(G.floorItems.indexOf(fi),1);if(vis)say(`The ${ITEMS[k].name} burns away, spilling its contents!`,'fire');scatter(fi.x,fi.y,fi.it.items);continue}
     if(k==='onigiri'){fi.it.kind='grilled';if(vis)say('An onigiri sizzles in the flames… grilled!','fire')}
-    else if(k==='meat'||k==='rotten'){fi.it.kind='cooked';if(vis)say('Meat sizzles in the fire. Cooked!','fire')}
+    else if(k==='meat'||k==='rotten'){fi.it.kind=k==='meat'?'cooked':'tainted';if(vis)say(k==='meat'?'Meat sizzles in the fire. Cooked!':'Rotten meat crackles in the fire… it smells strange.','fire')}
     else if(k==='oilJar'){G.floorItems.splice(G.floorItems.indexOf(fi),1);explode(fi.x,fi.y,'An oil jar explodes!')}
     else if(k==='miasma'){G.floorItems.splice(G.floorItems.indexOf(fi),1);poisonCloud(fi.x,fi.y,2,1);if(vis)say('A miasma jar cracks in the heat…','warn')}
     else if(['herb','seeds','dryGrass'].includes(k)||ITEMS[k].ch==='?'){G.floorItems.splice(G.floorItems.indexOf(fi),1);if(vis)say(`The ${ITEMS[k].name} burns up.`,'fire')}
@@ -624,7 +647,8 @@ function stormStep(){
   const strikes=h01(S,T,0,41)<0.15?2:h01(S,T,1,41)<0.5?1:0;
   for(let k=0;k<strikes;k++){const roll=h01(S,T,k,42);let c;
     const ms=G.ents.filter(m=>inStorm(m.x,m.y));
-    if(roll<0.4&&grates.length)c=grates[hashU(S,T,k,43)%grates.length];
+    const tall=grates.concat(cells.filter(j=>G.tile[j]===T_TREE));
+    if(roll<0.4&&tall.length)c=tall[hashU(S,T,k,43)%tall.length];
     else if(roll<0.65&&ms.length){const m=ms[hashU(S,T,k,44)%ms.length];c=idx(m.x,m.y)}
     else c=cells[hashU(S,T,k,45)%cells.length];
     strike(c%W,(c/W)|0)}
@@ -712,6 +736,22 @@ function freeStep(m,ex,ey,desperate){const nx=m.x+ex,ny=m.y+ey;return walkable(n
 function moveMonster(m,nx,ny){const oi=idx(m.x,m.y),dx=nx-m.x,dy=ny-m.y;m.x=nx;m.y=ny;if(dx||dy)m.face=[sgn(dx),sgn(dy)];
   if(m.trail){const t=G.tile[oi];if(t===T_GRASS||t===T_OIL||t===T_VINE)ignite(oi)}
   onEnter(m,dx,dy)}
+// Shortest path to (tx,ty) around walls, trees and hazards, preferring the straightest of the equally short routes.
+// Distances are flooded out from the target; if the target is occupied (you) or solid (a tree), the cells next to it are the goal.
+function pathStep(m,tx,ty){
+  if(cheb(m.x,m.y,tx,ty)>24)return false;
+  const N=W*H,dist=new Int16Array(N).fill(-1),s=idx(m.x,m.y),goal=idx(tx,ty),q=[];
+  const okCell=(x,y,j)=>j===s||(walkable(x,y)&&!occupant(x,y)&&safeFor(m,x,y));
+  if((occupant(tx,ty)&&goal!==s)||!walkable(tx,ty)){for(const [dx,dy] of DIRS8){const nx=tx+dx,ny=ty+dy;if(!inb(nx,ny))continue;const j=idx(nx,ny);if(okCell(nx,ny,j)&&canDiag(nx,ny,-dx,-dy)){dist[j]=0;q.push(j)}}}
+  else{dist[goal]=0;q.push(goal)}
+  if(dist[s]===0)return false;
+  for(let head=0;head<q.length&&dist[s]<0;head++){const i=q[head],x=i%W,y=(i/W)|0;
+    for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(!inb(nx,ny))continue;const j=idx(nx,ny);if(dist[j]>=0||!okCell(nx,ny,j)||!canDiag(nx,ny,-dx,-dy))continue;dist[j]=dist[i]+1;q.push(j)}}
+  if(dist[s]<0)return false;
+  let best=null,bd=1e9;
+  for(const [dx,dy] of DIRS8){const nx=m.x+dx,ny=m.y+dy;if(!inb(nx,ny))continue;const j=idx(nx,ny);if(dist[j]!==dist[s]-1||!canDiag(m.x,m.y,dx,dy))continue;
+    if(!walkable(nx,ny)||occupant(nx,ny))continue;const d=Math.hypot(nx-tx,ny-ty);if(d<bd){bd=d;best=[nx,ny]}}
+  if(!best)return false;moveMonster(m,...best);return true}
 function stepToward(m,tx,ty){let best=null,bs=stepScore(m.x,m.y,tx,ty);
   for(const [ex,ey] of DIRS8){if(!freeStep(m,ex,ey))continue;const s=stepScore(m.x+ex,m.y+ey,tx,ty);if(s<bs-1e-6){bs=s;best=[m.x+ex,m.y+ey]}}
   if(best)moveMonster(m,...best);return !!best}
@@ -748,7 +788,10 @@ function monsterAct(m){
     if(best&&stepToward(m,...best))return;
   }
   if(m.tx==null&&m.trail&&G.flies.length){let best=null,bd=9;for(const f of G.flies){const dd=cheb(m.x,m.y,f.x,f.y);if(dd<bd){bd=dd;best=f}}if(best){m.tx=best.x;m.ty=best.y}}
-  if(m.tx!=null){const tx=m.tx,ty=m.ty,ok=stepToward(m,tx,ty);if(!ok||(m.x===tx&&m.y===ty)){m.tx=null;m.ty=null;if(m.sus&&!m.alert&&!ok)faceToward(m,tx,ty)}return}
+  if(m.tx!=null){const tx=m.tx,ty=m.ty,ok=pathStep(m,tx,ty)||stepToward(m,tx,ty);if(!m.alert&&m.sus)m.sus=Math.max(m.sus,2);
+    if(!ok||(m.x===tx&&m.y===ty)){m.tx=null;m.ty=null;if(m.sus&&!m.alert){if(!ok)faceToward(m,tx,ty);else{m.search=4;if(seenBy(m.x,m.y))fxGlyph(m.x,m.y,'?','#ffe24a',0,500)}}}return}
+  // arrived at a noise: look around for a few turns
+  if(m.search>0){m.search--;const k=DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1]);m.face=DIRS8[(k+2)%8];return}
   // unaware: sometimes pause and look around (sentries turn 45°) — not while still suspicious of a sound
   if(!m.sus&&h01(P.seed,G.turn,m.id,61)<0.3){const k=DIRS8.findIndex(d=>d[0]===m.face[0]&&d[1]===m.face[1]);m.face=DIRS8[(k+(h01(P.seed,G.turn,m.id,62)<0.5?1:7))%8];return}
   for(let k=0;k<8;k++){
@@ -764,6 +807,7 @@ function monstersAct(){
     if(m.split&&G.tile[i]===T_WATER){m.hp=Math.min(m.maxhp+6,m.hp+2);if(m.hp>=m.maxhp+4){trySplit(m)}}
     if(!m.face)m.face=DIRS8[m.dir];
     if(m.alert>0)m.alert--;if(m.sus>0)m.sus--;
+    if(m.para>0){m.para--;continue}
     if(m.frozen>0){m.frozen--;continue}
     if(m.stuck>0){m.stuck--;continue}
     if(m.slow&&!m.panic&&G.turn%2)continue;
@@ -792,7 +836,9 @@ function endTurn(){
   if(G.turn%45===0&&G.ents.length<Math.round(10*P.monsterDensity)+G.depth)spawnMonster(false);
   finishTurn();
 }
-function finishTurn(){computeView();updateHUD();if(lookMode)updateLook()}
+function finishTurn(){computeView();updateHUD();if(lookMode)updateLook();
+  const p=G.player;if(p.para>0&&!G.over&&!G.paraT){G.paraT=setTimeout(()=>{G.paraT=null;if(G.over)return;p.para--;if(!p.para)say('You can move again.','good');endTurn()},170)}}
+function paralyzed(){if(G.player.para>0){say("You can't move — you're paralyzed!",'bad');return true}return false}
 function playerMove(dx,dy){
   if(G.over)return;const p=G.player;
   if(dx===0&&dy===0){endTurn();return}
@@ -811,8 +857,14 @@ function playerMove(dx,dy){
     playerMove(pick[0],pick[1]);return}
   if(G.npc&&G.npc.x===nx&&G.npc.y===ny){openSmith();return}
   const t=G.tile[idx(nx,ny)];
+  if(t===T_TREE){const ti=idx(nx,ny);G.fuel[ti]--;noise(nx,ny,4);fxGlyph(nx,ny,'/','#c08a50',0,200);
+    if(G.fuel[ti]<=0){G.tile[ti]=T_DIRT;G.fuel[ti]=0;const L=mkItem('lumber');L.n=2+Math.floor(G.rng()*3);placeFloor(nx,ny,L);if(G.rng()<0.5)placeFloor(nx,ny,mkItem('dryGrass'));say(`Timber! The tree falls. (${L.n} lumber)`,'good')}
+    else say(`You chop at the tree. (${G.fuel[ti]} more)`,'dim');endTurn();return}
+  if(t===T_WALL&&G.ore[idx(nx,ny)]&&!(p.weapon&&WEAPONS[p.weapon.w].dig)){say(`A vein of ${G.ore[idx(nx,ny)]===2?'mithril':'iron'} ore. You need a pickaxe to mine it.`,'dim');return}
   if(t===T_WALL&&p.weapon&&WEAPONS[p.weapon.w].dig&&!dx!==!dy&&nx>0&&ny>0&&nx<W-1&&ny<H-1){
-    G.tile[idx(nx,ny)]=T_FLOOR;G.heat[idx(nx,ny)]=G.heat[idx(p.x,p.y)];say('You dig through the wall.','dim');fxGlyph(nx,ny,'#','#9aa6b6');endTurn();return}
+    const oi=idx(nx,ny);if(G.ore[oi]){const o=mkItem(G.ore[oi]===2?'mithrilOre':'ironOre');o.n=G.ore[oi]===2?1:1+Math.floor(G.rng()*2);G.ore[oi]=0;G.tile[oi]=T_FLOOR;G.heat[oi]=G.heat[idx(p.x,p.y)];
+      placeFloor(nx,ny,o);noise(nx,ny,5);fxGlyph(nx,ny,'*',ITEMS[o.kind].color,0,300);say(`You break open the vein: ${itemName(o)}!`,'good');endTurn();return}
+    G.tile[idx(nx,ny)]=T_FLOOR;G.heat[idx(nx,ny)]=G.heat[idx(p.x,p.y)];noise(nx,ny,4);say('You dig through the wall.','dim');fxGlyph(nx,ny,'#','#9aa6b6');endTurn();return}
   if(!canDiag(p.x,p.y,dx,dy))return;
   if(t===T_CAMP){const ci=idx(nx,ny),k=findItem('lumber');
     if(k){removeFound(k);G.fuel[ci]=Math.min(9999,G.fuel[ci]+60);say(`You feed lumber to the campfire. (${G.fuel[ci]} turns of fuel)`,'fire');endTurn()}
@@ -911,6 +963,7 @@ function throwIt(it){
     return}
   if(hit){
     if(it.kind==='herb'){hit.hp=Math.min(hit.maxhp,hit.hp+25);say(`The ${hit.name} looks healthier. Oops.`,'warn');return}
+    if(it.kind==='tainted'){hit.para=6;hit.tx=null;hit.ty=null;say(`The ${hit.name} gulps down the jerky… and goes rigid! (paralyzed 6 turns)`,'good');fxGlyph(hit.x,hit.y,'≈','#c9a0ff',0,600);return}
     hurt(hit,it.kind==='weapon'?WEAPONS[it.w].atk+it.plus+2:2,'you');
   }
   if(G.tile[idx(lx,ly)]===T_WATER&&!hit){say(`The ${d.name} sinks.`,'dim');return}
@@ -936,6 +989,7 @@ function useItem(k,bag){
     case 'onigiri':p.full=Math.min(100,p.full+50);say('Delicious. (+50 fullness)','good');break;
     case 'grilled':p.full=Math.min(100,p.full+65);p.hp=Math.min(p.maxhp,p.hp+5);say('Smoky and perfect. (+65 fullness)','good');break;
     case 'meat':p.full=Math.min(100,p.full+25);if(G.rng()<0.5){say('Raw meat… your stomach lurches.','bad');G.cause='raw meat';hurt(p,4,'raw meat')}else say('Chewy, but filling. (+25 fullness)','good');break;
+    case 'tainted':p.full=Math.min(100,p.full+30);p.para=5;say('Chewy… then your limbs lock up. You are paralyzed! (5 turns)','bad');fxGlyph(p.x,p.y,'≈','#c9a0ff',0,600);break;
     case 'cooked':p.full=Math.min(100,p.full+40);p.hp=Math.min(p.maxhp,p.hp+10);say('A hearty meal. (+40 fullness, +10 HP)','good');break;
     case 'rotten':say('You retch violently, releasing a foul cloud!','bad');p.full=Math.min(100,p.full+5);poisonCloud(p.x,p.y,1,0.7);hurt(p,5,'rotten meat');break;
     case 'herb':if(p.hp>=p.maxhp){p.maxhp+=2;p.hp+=2;say('You feel sturdier. (+2 max HP)','good')}else{p.hp=Math.min(p.maxhp,p.hp+25);say('You feel better.','good')}break;
@@ -980,7 +1034,7 @@ function bagScroll(kind,bag){
     case 'inferno':{let cooked=0,burnt=0;const jars=[];
       bag.items=bag.items.filter(x=>{const k=x.kind;
         if(k==='onigiri'){x.kind='grilled';cooked++;return true}
-        if(k==='meat'||k==='rotten'){x.kind='cooked';cooked++;return true}
+        if(k==='meat'||k==='rotten'){x.kind=k==='meat'?'cooked':'tainted';cooked++;return true}
         if(k==='herb'||k==='seeds'||ITEMS[k].ch==='?'){burnt++;return false}
         if(k==='oilJar'||k==='miasma'){jars.push(k);return false}
         return true});
@@ -1004,7 +1058,7 @@ function hslPal(h,s,l0,l1){const a=[];for(let k=0;k<10;k++)a.push(`hsl(${h},${s}
 const PAL={
   face:hslPal(215,16,10,78),top:hslPal(218,14,7,42),floor:hslPal(220,12,8,34),grass:hslPal(105,48,9,58),
   water:hslPal(205,72,12,62),ash:hslPal(30,6,8,36),oil:hslPal(278,45,10,58),ice:hslPal(188,80,22,86),
-  mem:hslPal(225,22,6,26),logs:hslPal(28,55,14,55),rim:hslPal(205,30,20,86),rimMem:hslPal(215,22,10,40),smoke:hslPal(220,8,14,52),pois:hslPal(72,95,18,68),
+  mem:hslPal(225,22,6,26),leaf:hslPal(120,50,12,52),ironOre:hslPal(22,62,22,64),mithOre:hslPal(188,85,30,82),logs:hslPal(28,55,14,55),rim:hslPal(205,30,20,86),rimMem:hslPal(215,22,10,40),smoke:hslPal(220,8,14,52),pois:hslPal(72,95,18,68),
   mud:hslPal(28,42,8,42),dirt:hslPal(35,25,8,40),vine:hslPal(128,55,10,55),vineIce:hslPal(185,55,22,82),
   grate:hslPal(205,12,12,62),hot:hslPal(12,95,18,62),snow:hslPal(210,25,35,96),slick:hslPal(262,60,25,82),
   fire:Array.from({length:10},(_,k)=>`hsl(${(k*6).toFixed(0)},100%,${(32+k*5).toFixed(0)}%)`),
@@ -1070,9 +1124,11 @@ function render(now){
         case T_SNOW: if(G.prints[i]&&sx===1&&sy!==1){ch=':';b=0.3;pal=PAL.floor}else{b=0.35+0.55*n;ramp=RAMP.snow;pal=PAL.snow}break;
         case T_SLICK:{b=0.55+0.4*h01(i,sx,sy,fr2);ramp=RAMP.slick;pal=G.stored[i]&&h01(i,sx,sy,fr)<0.3?PAL.fire:PAL.slick;if(G.stored[i])lit=true;break}
         case T_WATER:{const w=Math.sin(now*0.0025+x*0.9+y*0.45+sx*0.8-sy*0.3);b=0.45+0.3*w;ch=w>0.3?'~':w>-0.4?'-':'.';pal=PAL.water;break}
+        case T_TREE:{if(sy===2){ch=sx===1?'|':(n<0.5?',':' ');b=0.5+0.3*n;pal=sx===1?PAL.logs:PAL.grass}else{const sway=h01(i,sx,sy,fr2)<0.15;ch=sy===0?(sx===1?'^':'%'):(sx===1?'&':'%');if(sway)ch='*';b=0.55+0.4*n;pal=PAL.leaf}break}
         case T_CAMP:{const f=h01(i,sx,sy,fr);if(sy===2){ch=sx===1?'#':'=';b=0.55+0.2*n;pal=PAL.logs}else{b=sy===1?0.65+0.35*f:0.35+0.5*f*(sx===1?1:0.5);ramp=RAMP.fire;pal=PAL.fire}lit=true;break}
         case T_FIRE:{const f=h01(i,sx,sy,fr);b=0.45+0.55*f-sy*0.08+(G.fuel[i]>1?0.1:0);ramp=RAMP.fire;pal=PAL.fire;lit=true;break}
       }
+      if(t===T_WALL&&G.ore[i]&&!((sy===0&&oT)||(sy===2&&oB)||(sx===0&&oL)||(sx===2&&oR))&&h01(i,sx,sy,9)<0.6){ch=h01(i,sx,sy,fr2)<0.12?'✦':'*';pal=G.ore[i]===2?PAL.mithOre:PAL.ironOre;b=v?0.55+0.45*n:0.5;lit=v&&G.ore[i]===2}
       if(!lit)b*=lum;
       if(!v)pal=PAL.mem;
       // heat shimmer on hot ground
@@ -1100,9 +1156,10 @@ function render(now){
       else{cx.fillStyle=`rgba(255,170,90,${pulse.toFixed(2)})`;cx.fillText('×',px+TS/2,py+TS/2)}}}
   for(const m of G.ents){if(!G.vis[idx(m.x,m.y)])continue;
     if(m.silhouette)cx.globalAlpha=0.55;
-    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.color,0.88,m.silhouette?0:TS*0.45);
+    big(m.ch,m.x,m.y,m.frozen?'#9fe8ff':m.para?'#c9a0ff':m.color,0.88,m.silhouette?0:TS*0.45);
     cx.globalAlpha=1;
     const px=ox+m.x*TS,py=oy+m.y*TS;
+    if(m.para){cx.strokeStyle='#c9a0ff99';cx.setLineDash([3,3]);cx.strokeRect(px+TS*0.12,py+TS*0.08,TS*0.76,TS*0.84);cx.setLineDash([])}
     if(m.frozen){cx.strokeStyle='#9fe8ff88';cx.strokeRect(px+TS*0.12,py+TS*0.08,TS*0.76,TS*0.84)}
     if(m.panic){cx.font=`700 ${(TS*0.32).toFixed(1)}px ${FONT}`;cx.fillStyle='#ffe24a';cx.fillText('!',px+TS*0.85,py+TS*0.18)}
     if(m.face){const [fx,fy]=m.face,col=m.alert>0?'#ff5a4a':m.sus>0?'#ffe24a':'#aab4c2';
@@ -1142,14 +1199,14 @@ function render(now){
 }
 // ---------------- minimap ----------------
 let mmCanvas=null,mmBig=false,mmRect=null;
-const MM_COL={[T_CAMP]:[255,176,70],[T_FLOOR]:[34,42,54],[T_GRASS]:[48,96,42],[T_WATER]:[30,84,140],[T_FIRE]:[255,123,46],[T_ASH]:[60,56,52],[T_OIL]:[96,60,140],[T_ICE]:[140,200,225],
+const MM_COL={[T_TREE]:[40,110,50],[T_CAMP]:[255,176,70],[T_FLOOR]:[34,42,54],[T_GRASS]:[48,96,42],[T_WATER]:[30,84,140],[T_FIRE]:[255,123,46],[T_ASH]:[60,56,52],[T_OIL]:[96,60,140],[T_ICE]:[140,200,225],
   [T_STAIRS]:[190,246,255],[T_MUD]:[92,70,46],[T_DIRT]:[70,60,48],[T_VINE]:[40,120,60],[T_VINE_ICE]:[120,200,210],[T_GRATE]:[90,104,116],[T_SNOW]:[200,214,230],[T_SLICK]:[150,120,220]};
 function buildMinimap(){
   if(!G||!G.tile)return;
   if(!mmCanvas){mmCanvas=document.createElement('canvas');mmCanvas.width=W;mmCanvas.height=H}
   const m=mmCanvas.getContext('2d'),img=m.createImageData(W,H),d=img.data;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(!G.seen[i])continue;const t=G.tile[i];let c;
-    if(t===T_WALL){let edge=false;for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(inb(nx,ny)&&G.tile[idx(nx,ny)]!==T_WALL&&G.seen[idx(nx,ny)]){edge=true;break}}if(!edge)continue;c=[120,140,165]}
+    if(t===T_WALL){let edge=false;for(const [dx,dy] of DIRS8){const nx=x+dx,ny=y+dy;if(inb(nx,ny)&&G.tile[idx(nx,ny)]!==T_WALL&&G.seen[idx(nx,ny)]){edge=true;break}}if(!edge)continue;c=G.ore[i]===2?[120,220,255]:G.ore[i]===1?[210,130,80]:[120,140,165]}
     else c=MM_COL[t]||MM_COL[T_FLOOR];
     const o=i*4;d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=G.vis[i]||t===T_STAIRS?255:170}
   m.putImageData(img,0,0);
@@ -1201,7 +1258,7 @@ function modalOpen(){return !$('#modal').hidden}
 function closeModal(){$('#modal').hidden=true;G.aimPreview=false;const ae=document.activeElement;if(ae&&$('#sheet').contains(ae))ae.blur()}
 function openModal(html,cls){$('#sheet').innerHTML=html;const m=$('#modal');m.className='modal'+(cls?' '+cls:'');m.hidden=false;$('#sheet').scrollTop=0;kbAfterRender()}
 $('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal'&&!G.over)closeModal()});
-const OPKEYS={merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
+const OPKEYS={save:'s',load:'l',del:'x',export:'e',import:'i',copy:'c',go:'↵',merge:'m',use:'u',equip:'e',open:'o',put:'p',split:'s',throw:'t',drop:'d',cook:'c',cookall:'a',build:'b',take:'g',fire:'↵',hone:'h',pouch:'b'};
 function bindOps(map){$('#sheet').querySelectorAll('[data-op]').forEach(b=>{b.onclick=()=>{const f=map[b.dataset.op]||map['*'];f&&f(b.dataset.op,b)};
   const k=OPKEYS[b.dataset.op];if(k&&b.tagName==='BUTTON'&&!b.dataset.key){b.dataset.key=k;b.insertAdjacentHTML('afterbegin',`<span class="kh">${k.toUpperCase()}</span>`)}});kbAfterRender()}
 function choose(title,opts,back){
@@ -1210,7 +1267,7 @@ function choose(title,opts,back){
 }
 
 // ---------------- cooking ----------------
-const COOKS={meat:'cooked',rotten:'cooked',onigiri:'grilled'};
+const COOKS={meat:'cooked',rotten:'tainted',onigiri:'grilled'};
 function cookSource(){const p=G.player;for(const [dx,dy] of [[0,0],...DIRS8]){const x=p.x+dx,y=p.y+dy;if(!inb(x,y))continue;const i=idx(x,y);
   if(G.tile[i]===T_CAMP)return 'the campfire';if(G.tile[i]===T_FIRE)return 'the flames';if(G.tile[i]===T_GRATE&&G.heat[i]>0.6)return 'the red-hot grate'}return null}
 function rawFoods(){const out=[];for(const it of G.player.inv){if(COOKS[it.kind])out.push(it);if(isBag(it))for(const c of it.items)if(COOKS[c.kind])out.push(c)}return out}
@@ -1253,7 +1310,7 @@ function bagsIn(exclude){return G.player.inv.filter(x=>isBag(x)&&x!==exclude)}
 function rowHtml(it,k,sel,eq){const d=ITEMS[it.kind];return `<div class="row selrow ${k===sel?'sel':''}" tabindex="-1" data-op="r${k}"><span class="g" style="color:${d.color}">${d.ch}</span>${itemName(it)}${eq?' <span style="color:#ff8a3d;margin-left:auto">E</span>':''}</div>`}
 function act(fn){closeModal();if(fn()!==false)endTurn()}
 function openInv(){
-  if(G.over)return;const p=G.player,inv=p.inv;
+  if(G.over||paralyzed())return;const p=G.player,inv=p.inv;
   if(invBag&&!inv.includes(invBag))invBag=null;
   if(invBag)return openBagView();
   if(!inv.length){say('Your pack is empty.','dim');return}
@@ -1327,19 +1384,43 @@ function openBagView(){
 }
 
 // ---------------- blacksmith ----------------
-const SEAL_COST=80,POUCH_COST=60;
+const SEAL_COST=80,POUCH_COST=60,PICK_COST=40;
 const honeCost=w=>25*(Math.max(0,w.plus)+1);
+function countItem(kind){let n=0;for(const it of G.player.inv){if(it.kind===kind)n+=qty(it);if(isBag(it))for(const c of it.items)if(c.kind===kind)n+=qty(c)}return n}
+function spendItem(kind,n){for(let k=0;k<n;k++){const f=findItem(kind);if(!f)return false;removeFound(f)}return true}
+const SMELT=[['ironOre','ironBar',5],['mithrilOre','mithrilBar',15]];
+const TRADES=[
+  {id:'greatsword',label:'GREATSWORD (power 7)',cost:{ironBar:3},give:()=>mkWeapon('greatsword')},
+  {id:'mithril',label:'MITHRIL EDGE (power 9)',cost:{mithrilBar:2,ironBar:1},give:()=>mkWeapon('mithril')},
+  {id:'temper',label:'TEMPER YOUR WEAPON +2',cost:{ironBar:2},needsWeapon:true,apply:w=>{w.plus+=2}},
+  {id:'runed',label:'RUNE-FORGE: ADD EVERY SEAL',cost:{mithrilBar:2},needsWeapon:true,apply:w=>{for(const s of Object.keys(SEALS))if(!w.seals.includes(s))w.seals.push(s)}},
+  {id:'satchel',label:'SATCHEL',cost:{ironBar:2},give:()=>mkItem('satchel')},
+  {id:'charge',label:'OVERCHARGE ALL STAFFS +3',cost:{mithrilBar:1},apply:()=>{for(const x of G.player.inv)if(ITEMS[x.kind].staff)x.charges+=3}},
+];
+const costText=c=>Object.entries(c).map(([k,n])=>`${n} ${ITEMS[k].name.toLowerCase()}${n>1?'s':''}`).join(' + ');
 function openSmith(){
   const p=G.player,w=p.weapon;
-  let h=`<h3>BLACKSMITH · YOU HAVE $${p.gold}</h3><div class="desc">"${w?`A ${itemName(w)}. I can make that sing.`:'Bare-handed? Equip a weapon and come back.'}"</div><div class="btns col">`;
+  let h=`<h3>BLACKSMITH · $${p.gold}</h3><div class="desc">"${w?`A ${itemName(w)}. I can make that sing.`:'Bare-handed? I can still smelt and trade.'}"<br><span class="dim">You carry: ${['ironOre','mithrilOre','ironBar','mithrilBar'].map(k=>`${countItem(k)} ${ITEMS[k].name.toLowerCase()}`).join(' · ')}</span></div><div class="btns col">`;
+  for(const [ore,bar,fee] of SMELT){const n=countItem(ore),k=Math.min(Math.floor(n/2),Math.floor(p.gold/fee));
+    h+=`<button data-op="smelt:${ore}" ${k<1?'disabled':''}>SMELT ${ITEMS[ore].name.toUpperCase()} → BARS${k>0?` ×${k}`:''} — 2 ore + $${fee} each</button>`}
+  for(const t of TRADES){const can=Object.entries(t.cost).every(([k,n])=>countItem(k)>=n)&&(!t.needsWeapon||w)&&(!t.give||p.inv.length<12);
+    h+=`<button data-op="trade:${t.id}" ${can?'':'disabled'}>${t.label} — ${costText(t.cost)}</button>`}
   if(w){const hc=honeCost(w);h+=`<button data-op="hone" ${p.gold<hc?'disabled':''}>HONE TO +${w.plus+1} — $${hc}</button>`;
     for(const s of Object.keys(SEALS))if(!w.seals.includes(s))h+=`<button data-op="seal:${s}" ${p.gold<SEAL_COST?'disabled':''}>${SEALS[s].name.toUpperCase()} SEAL — $${SEAL_COST}</button>`}
+  h+=`<button data-op="pick" ${p.gold<PICK_COST||p.inv.length>=12?'disabled':''}>BUY A PICKAXE — $${PICK_COST}</button>`;
   h+=`<button data-op="pouch" ${p.gold<POUCH_COST||p.inv.length>=12?'disabled':''}>BUY A POUCH — $${POUCH_COST}</button><button data-op="close">LEAVE</button></div>`;
   openModal(h);
   bindOps({close:closeModal,
     hone:()=>{const c=honeCost(w);p.gold-=c;w.plus++;say(`Clang! Your weapon is now ${itemName(w)}.`,'good');updateHUD();openSmith()},
     pouch:()=>{p.gold-=POUCH_COST;p.inv.push(mkItem('pouch'));say('You buy a pouch.','good');updateHUD();openSmith()},
-    '*':(op)=>{if(!op.startsWith('seal:'))return;const s=op.slice(5);p.gold-=SEAL_COST;w.seals.push(s);say(`The smith hammers a ${SEALS[s].name} seal into your ${WEAPONS[w.w].name}.`,'good');updateHUD();openSmith()}});
+    pick:()=>{p.gold-=PICK_COST;p.inv.push(mkWeapon('pickaxe'));say('You buy a pickaxe. Walls with ore veins are yours to mine.','good');updateHUD();openSmith()},
+    '*':(op)=>{
+      if(op.startsWith('seal:')){const s=op.slice(5);p.gold-=SEAL_COST;w.seals.push(s);say(`The smith hammers a ${SEALS[s].name} seal into your ${WEAPONS[w.w].name}.`,'good')}
+      else if(op.startsWith('smelt:')){const [ore,bar,fee]=SMELT.find(x=>x[0]===op.slice(6));const k=Math.min(Math.floor(countItem(ore)/2),Math.floor(p.gold/fee));
+        spendItem(ore,k*2);p.gold-=k*fee;const b=mkItem(bar);b.n=k;if(!addToPack(b))placeFloor(p.x,p.y,b);say(`The furnace roars. You get ${k} ${ITEMS[bar].name.toLowerCase()}${k>1?'s':''}.`,'good')}
+      else if(op.startsWith('trade:')){const t=TRADES.find(x=>x.id===op.slice(6));for(const [k,n] of Object.entries(t.cost))spendItem(k,n);
+        if(t.give){const it=t.give();p.inv.push(it);say(`The smith hands you a ${itemName(it)}.`,'good')}else{t.apply(w);say(w&&t.needsWeapon?`Done. Your weapon is now ${itemName(w)}.`:'Done. Your staffs crackle with power.','good')}}
+      updateHUD();openSmith()}});
 }
 
 // ---------------- engine panel ----------------
@@ -1352,10 +1433,11 @@ function openParams(){
   }
   h+=`<div class="ph">RUN</div><div class="prm"><label>Seed</label><input type="number" id="seedIn" value="${P.seed}"><span></span></div>
   <div class="note">State hash: <b style="color:#fff">${stateHash()}</b> (turn ${G.turn})</div>
-  <div class="btns"><button id="sbx">${SB?'EXIT SANDBOX':'SANDBOX MODE'}</button><button id="rs">RESTART SEED</button><button id="rr">RANDOM SEED</button><button id="pc">CLOSE</button></div>`;
+  <div class="btns"><button id="svl">SAVE / LOAD</button><button id="sbx">${SB?'EXIT SANDBOX':'SANDBOX MODE'}</button><button id="rs">RESTART SEED</button><button id="rr">RANDOM SEED</button><button id="pc">CLOSE</button></div>`;
   openModal(h);
   $('#sheet').querySelectorAll('[data-k]').forEach(el=>el.oninput=()=>{const k=el.dataset.k;P[k]=el.tagName==='SELECT'?el.value:+el.value;
     if(el.nextElementSibling)el.nextElementSibling.textContent=el.value;if(k==='zoom')resize();if(k==='lightRadius')computeView();updateHUD()});
+  $('#svl').onclick=()=>{closeModal();openSaves()};
   $('#sbx').onclick=()=>{closeModal();SB?exitSandbox():enterSandbox()};
   $('#rs').onclick=()=>{closeModal();if(SB)exitSandbox();G.log=[];newRun(+$('#seedIn').value||0)};
   $('#rr').onclick=()=>{closeModal();if(SB)exitSandbox();G.log=[];newRun((Math.random()*1e9)>>>0)};
@@ -1370,12 +1452,12 @@ function showEnd(title,body){
 //  SANDBOX
 // ============================================================
 const BRUSHES=[
-  ['GROUND',[['t:1','floor'],['t:0','wall'],['t:2','grass'],['t:3','water'],['t:6','oil'],['t:7','ice'],['t:9','mud'],['t:10','dirt'],['t:11','vines'],['t:13','grate'],['t:14','snow'],['t:15','slick ice'],['t:5','ash'],['t:4','fire'],['t:16','campfire']]],
+  ['GROUND',[['t:1','floor'],['t:0','wall'],['t:2','grass'],['t:3','water'],['t:6','oil'],['t:7','ice'],['t:9','mud'],['t:10','dirt'],['t:11','vines'],['t:13','grate'],['t:14','snow'],['t:15','slick ice'],['t:5','ash'],['t:4','fire'],['t:16','campfire'],['t:17','tree'],['o:1','iron vein (on wall)'],['o:2','mithril vein (on wall)']]],
   ['AIR & ENERGY',[['a:smoke','smoke'],['a:pois','poison'],['a:hot','heat'],['a:cold','cold'],['a:zap','lightning']]],
   ['CREATURES',[...Object.keys(MON).map(k=>['m:'+k,MON[k].name]),['npc','blacksmith'],['erase','erase thing']]],
   ['ITEMS',Object.keys(ITEMS).map(k=>['i:'+k,ITEMS[k].name])],
 ];
-const BRUSH_COL={'t:16':'#ffb050','t:0':'#8a96a8','t:1':'#5a6575','t:2':'#7fd060','t:3':'#4aa8ff','t:4':'#ff7b2e','t:5':'#8a8078','t:6':'#b07cff','t:7':'#9fe8ff','t:9':'#a07848','t:10':'#b09a78','t:11':'#4fc060','t:13':'#9aa6b6','t:14':'#f0f6ff','t:15':'#c9a8ff',
+const BRUSH_COL={'o:1':'#d08a5a','o:2':'#9fe8ff','t:17':'#4fb060','t:16':'#ffb050','t:0':'#8a96a8','t:1':'#5a6575','t:2':'#7fd060','t:3':'#4aa8ff','t:4':'#ff7b2e','t:5':'#8a8078','t:6':'#b07cff','t:7':'#9fe8ff','t:9':'#a07848','t:10':'#b09a78','t:11':'#4fc060','t:13':'#9aa6b6','t:14':'#f0f6ff','t:15':'#c9a8ff',
   'a:smoke':'#9aa0a8','a:pois':'#c8f040','a:hot':'#ff6a3a','a:cold':'#7fb8ff','a:zap':'#fff27a',npc:'#ffb050',erase:'#ff6a5a'};
 function brushLabel(b){for(const [,l] of BRUSHES)for(const [k,n] of l)if(k===b)return n;return b}
 function brushColor(b){if(BRUSH_COL[b])return BRUSH_COL[b];if(b.startsWith('m:'))return MON[b.slice(2)].color;if(b.startsWith('i:'))return ITEMS[b.slice(2)].color;return '#cfd6e0'}
@@ -1422,8 +1504,9 @@ function applyBrush(x,y,stroke){
   if(!inb(x,y))return;const b=SB.brush,i=idx(x,y),border=x===0||y===0||x===W-1||y===H-1;
   if(b.startsWith('t:')){if(border)return;const t=+b.slice(2);if(!passTile(t)&&occupant(x,y))return;
     G.tile[i]=t;G.fuel[i]=0;G.src[i]=0;G.stored[i]=0;G.elec[i]=0;
-    if(t===T_FIRE){G.fuel[i]=P.burnTime;G.src[i]=1;G.heat[i]=1}else if(t===T_CAMP){G.fuel[i]=120;G.heat[i]=0.95}else if(COLD(t))G.heat[i]=0.1;
+    G.ore[i]=0;if(t===T_FIRE){G.fuel[i]=P.burnTime;G.src[i]=1;G.heat[i]=1}else if(t===T_CAMP){G.fuel[i]=120;G.heat[i]=0.95}else if(t===T_TREE){G.fuel[i]=3}else if(COLD(t))G.heat[i]=0.1;
     if(!passTile(t))G.floorItems=G.floorItems.filter(f=>!(f.x===x&&f.y===y));return}
+  if(b==='o:1'||b==='o:2'){if(G.tile[i]===T_WALL&&!border)G.ore[i]=+b.slice(2);return}
   if(G.tile[i]===T_WALL)return;
   switch(b){
     case 'a:smoke':G.gas[i]=1;return;
@@ -1456,16 +1539,16 @@ const TDESC={[T_WALL]:'Solid rock. A pickaxe can dig through it.',[T_FLOOR]:'Bar
   [T_FIRE]:'Burning! Hurts anything standing in it.',[T_ASH]:'Burnt ground. Regrows into grass; rain turns it to mud.',[T_OIL]:'Burns fast and chains to nearby oil. Freezes into slick ice.',
   [T_ICE]:'Walkable. Melts with heat — whoever stands on it drops into freezing water.',[T_STAIRS]:'Stairs leading down.',[T_MUD]:'Traps you for a turn. Bakes into dirt when hot.',
   [T_DIRT]:'Grass regrows quickly here.',[T_VINE]:'Blocks movement and sight. Hack through it or burn it fast.',[T_VINE_ICE]:'Frozen vines. They shatter if you walk into them.',
-  [T_GRATE]:'Metal. Conducts lightning and heat; scalding when hot.',[T_SNOW]:'Shows footprints. Melts into puddles.',[T_CAMP]:'A contained fire: light, heat and somewhere to cook. You heal every turn beside it. Walk into it with lumber to add fuel. Rain or frost puts it out; its embers can catch nearby grass.',[T_SLICK]:'Frozen oil. You slide across it until you hit something.'};
+  [T_GRATE]:'Metal. Conducts lightning and heat; scalding when hot.',[T_SNOW]:'Shows footprints. Melts into puddles.',[T_TREE]:'A tree. Blocks movement and sight — good cover. Chop it down for lumber (3 swings, noisy). Burns for a long time.',[T_CAMP]:'A contained fire: light, heat and somewhere to cook. You heal every turn beside it. Walk into it with lumber to add fuel. Rain or frost puts it out; its embers can catch nearby grass.',[T_SLICK]:'Frozen oil. You slide across it until you hit something.'};
 MON.rat.desc='Scurries about; only fights when you come close.';MON.goblin.desc='Hunts you on sight.';MON.beetle.desc='Grazes on grass and chews through vines, leaving bare dirt.';
 MON.slime.desc='Splits in two when hit. Heals and multiplies in water.';MON.ember.desc='Leaves fire wherever it walks through grass or oil. Drawn to fireflies; water hurts it.';
 MON.toad.desc='Belches clouds of poison gas. Immune to poison.';MON.thief.desc='Steals an item and flees at double speed. Drops loot if it runs through fire.';
 MON.ogre.desc='Slow but brutal. Panics near fire and tramples anything in its way.';MON.wraith.desc='Freezes the ground it walks on. Immune to cold, takes double damage from fire.';
-function traits(m){const t=[];if(m.fireImmune)t.push('fire-immune');if(m.poisonImmune)t.push('poison-immune');if(m.coldImmune)t.push('cold-immune');if(m.slow)t.push('slow');
+function traits(m){const t=[];if(m.para)t.push(`paralyzed ${m.para}t`);if(m.fireImmune)t.push('fire-immune');if(m.poisonImmune)t.push('poison-immune');if(m.coldImmune)t.push('cold-immune');if(m.slow)t.push('slow');
   if(m.frozen)t.push(`frozen ${m.frozen}t`);if(m.stuck)t.push('stuck in mud');if(m.panic)t.push('panicking');if(m.fleeing)t.push('fleeing');if(m.carry)t.push(`carrying your ${itemName(m.carry)}`);
   return t}
 function awareness(m){const f=m.face?ARROWS[m.face.join(',')]:'?';
-  return m.alert>0?`<span style="color:#ff6a5a">ALERTED — hunting you</span> · facing ${f}`:m.sus>0?`<span style="color:#ffe24a">suspicious — investigating a noise</span> · facing ${f}`:`<span style="color:#9be070">unaware</span> · facing ${f}`}
+  return m.alert>0?`<span style="color:#ff6a5a">ALERTED — hunting you</span> · facing ${f}`:m.search>0?`<span style="color:#ffe24a">searching the area</span> · facing ${f}`:m.sus>0?`<span style="color:#ffe24a">suspicious — investigating a noise</span> · facing ${f}`:`<span style="color:#9be070">unaware</span> · facing ${f}`}
 function lookTargets(){const p=G.player,out=[];
   G.ents.filter(m=>G.vis[idx(m.x,m.y)]).sort((a,b)=>cheb(a.x,a.y,p.x,p.y)-cheb(b.x,b.y,p.x,p.y)).forEach(m=>out.push([m.x,m.y]));
   if(G.npc&&G.vis[idx(G.npc.x,G.npc.y)])out.push([G.npc.x,G.npc.y]);
@@ -1489,6 +1572,7 @@ function faceLookTarget(){
   G.aimPreview=true;clearTimeout(G.aimT);G.aimT=setTimeout(()=>{if(!modalOpen())G.aimPreview=false},1500);
 }
 function dirInput(dx,dy){
+  if(!lookMode&&paralyzed())return;
   if(lookMode){if(!dx&&!dy)lookNext();else lookCur={x:clamp(lookCur.x+dx,0,W-1),y:clamp(lookCur.y+dy,0,H-1)};updateLook();return}
   stopExplore();playerMove(dx,dy)}
 function updateLook(){
@@ -1503,7 +1587,7 @@ function updateLook(){
   if(m){const d=MON[m.kind];h+=head(m.ch,m.frozen?'#9fe8ff':m.color,`${m.name[0].toUpperCase()+m.name.slice(1)} — HP ${m.hp}/${m.maxhp} · ATK ${m.atk} · DEF ${m.def}`)+`<div>${d.desc||''}</div>`;
     const tr=traits(m);h+=`<div>${awareness(m)}</div>`;if(tr.length)h+=`<div class="dim">${tr.join(' · ')}</div>`;
     if(!m.alert){const behind=facingDot(m,p.x,p.y)<-0.35;h+=`<div class="dim">${behind?'You are behind it — a strike now is a ×3 critical.':'Strike while it is unaware for ×2; from behind for ×3.'}</div>`}}
-  if(G.npc&&G.npc.x===x&&G.npc.y===y)h+=head('&','#ffb050','Blacksmith')+`<div>Hones weapons and stamps seals for gold. Walk into them to trade.</div>`;
+  if(G.npc&&G.npc.x===x&&G.npc.y===y)h+=head('&','#ffb050','Blacksmith')+`<div>Smelts ore into bars, trades bars for powerful gear, hones weapons and stamps seals. Walk into them to trade.</div>`;
   const its=G.floorItems.filter(f=>f.x===x&&f.y===y);
   for(const f of its.slice(0,2)){const d=ITEMS[f.it.kind];h+=head(d.ch,d.color,itemName(f.it))+`<div>${d.desc}${isBag(f.it)&&f.it.items.length?' Inside: '+f.it.items.map(itemName).join(', ')+'.':''}</div>`}
   if(its.length>2)h+=`<div class="dim">…and ${its.length-2} more item${its.length>3?'s':''}.</div>`;
@@ -1516,7 +1600,7 @@ function updateLook(){
 
 // ---------------- AUTO-EXPLORE ----------------
 let exploring=false,expTimer=null,expHp=0,expStall=0;
-function expCost(i){const t=G.tile[i];if(t===T_WALL||t===T_CAMP||!G.seen[i])return -1;
+function expCost(i){const t=G.tile[i];if(t===T_WALL||t===T_CAMP||t===T_TREE||!G.seen[i])return -1;
   if(t===T_FIRE||(G.elec[i]&&(t===T_WATER||t===T_GRATE))||G.pois[i]>0.2||(t===T_GRATE&&G.heat[i]>0.55)||G.heat[i]>0.8)return -1;
   return t===T_MUD?4:(t===T_VINE||t===T_VINE_ICE)?3:t===T_SLICK?8:1}
 function pathField(){
@@ -1566,11 +1650,70 @@ function exploreTick(){
   if(p.x===ox&&p.y===oy&&G.tile[j]===ot){if(++expStall>3)return stopExplore('Exploration is stuck.','warn')}else expStall=0;
 }
 
+// ---------------- SAVE / LOAD ----------------
+const SAVE_VERSION=1,SAVE_PREFIX='glyphwander-save-',SLOTS=['auto','1','2','3'];
+const LAYERS=['tile','fuel','gas','pois','heat','elec','src','stored','prints','seen','roomIdx','ore'];
+const TA={Uint8Array,Int8Array,Int16Array,Float32Array};
+const SKIP=new Set(['rng','fx','vis','light','cone','env','expIgnore','expDone','paraT','aimT','aimPreview','flashT',...LAYERS]);
+function b64(u8){let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s)}
+function unb64(str){const b=atob(str),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+function serialize(){
+  const g={};for(const k in G)if(!SKIP.has(k)&&typeof G[k]!=='function')g[k]=G[k];
+  g.player=Object.assign({},G.player);delete g.player.weapon;g.weaponIdx=G.player.weapon?G.player.inv.indexOf(G.player.weapon):-1;
+  const layers={};for(const k of LAYERS){const a=G[k];layers[k]=[a.constructor.name,b64(new Uint8Array(a.buffer,a.byteOffset,a.byteLength))]}
+  return JSON.stringify({v:SAVE_VERSION,when:Date.now(),P:Object.assign({},P),rng:G.rng.get(),g,layers});
+}
+function deserialize(str){
+  const o=JSON.parse(str);if(!o||o.v!==SAVE_VERSION||!o.g||!o.layers)throw new Error('not a Glyphwander save');
+  stopExplore();exitLook();setFace(false);if(SB){stopRun();SB=null}
+  Object.assign(P,o.P);
+  const g=Object.assign({},o.g),wi=g.weaponIdx;delete g.weaponIdx;
+  for(const k of LAYERS){const [t,d]=o.layers[k];const u=unb64(d);g[k]=new TA[t](u.buffer)}
+  const N=W*H;g.vis=new Uint8Array(N);g.light=new Float32Array(N);g.fx=[];g.expIgnore=new Set();g.expDone=new Set();g.expDepth=-1;
+  g.rng=mulberry32(0);g.rng.set(o.rng);
+  g.player.weapon=wi>=0?g.player.inv[wi]:null;
+  G=g;camX=G.player.x;camY=G.player.y;closeModal();setActs();resize();computeView();updateHUD();renderLog();
+}
+function store(){try{const k='__gw_test';localStorage.setItem(k,'1');localStorage.removeItem(k);return localStorage}catch(e){return null}}
+function slotData(k){const ls=store();if(!ls)return null;try{const s=ls.getItem(SAVE_PREFIX+k);return s?JSON.parse(s):null}catch(e){return null}}
+function canSave(){if(SB){say('Exit the sandbox to save your run.','dim');return false}if(G.over){say('This run is over — nothing to save.','dim');return false}return true}
+function saveTo(k,quiet){const ls=store();if(!ls){if(!quiet)say('Browser storage is unavailable here — use EXPORT CODE instead.','warn');return false}
+  try{ls.setItem(SAVE_PREFIX+k,serialize());if(!quiet)say(`Saved to ${k==='auto'?'the autosave':'slot '+k}.`,'good');return true}catch(e){if(!quiet)say('Could not save: '+e.message,'bad');return false}}
+function autosave(){if(!G||G.sandbox||G.over)return;saveTo('auto',true)}
+function loadFrom(k){const ls=store();const s=ls&&ls.getItem(SAVE_PREFIX+k);if(!s){say('That slot is empty.','dim');return}
+  try{deserialize(s);say(`Loaded ${k==='auto'?'the autosave':'slot '+k}: B${G.depth}F, turn ${G.turn}.`,'good')}catch(e){say('That save could not be loaded: '+e.message,'bad')}}
+function toCode(){return 'GW1:'+b64(new TextEncoder().encode(serialize()))}
+function fromCode(code){code=code.trim();if(!code.startsWith('GW1:'))throw new Error('codes start with GW1:');deserialize(new TextDecoder().decode(unb64(code.slice(4))))}
+let saveSel=1;
+function openSaves(){
+  const ls=store();saveSel=clamp(saveSel,0,SLOTS.length-1);const k=SLOTS[saveSel],d=slotData(k);
+  const label=s=>s==='auto'?'Autosave':'Slot '+s;
+  const info=o=>o?`B${o.g.depth}F · Lv${o.g.player.lv} · turn ${o.g.turn} · seed ${o.P.seed} · ${new Date(o.when).toLocaleString()}`:'<span class="dim">empty</span>';
+  openModal(`<h3>SAVE / LOAD</h3>${ls?'':'<div class="desc" style="color:#f0c060">Browser storage is blocked in this view. Save slots won\'t work here, but EXPORT and IMPORT codes do.</div>'}`+
+    SLOTS.map((s,i)=>`<div class="row selrow ${i===saveSel?'sel':''}" tabindex="-1" data-op="r${i}"><span class="g" style="color:${s==='auto'?'#9be070':'#ff8a3d'}">${s==='auto'?'↻':s}</span><span><b>${label(s)}</b><br><span style="font-size:11px">${info(slotData(s))}</span></span></div>`).join('')+
+    `<div class="desc">${k==='auto'?'The autosave is written each time you reach a new floor.':'Saves are kept in this browser. Use a code to move a run between devices.'}</div>
+    <div class="btns"><button data-op="save" ${k==='auto'||!ls||SB||G.over?'disabled':''}>SAVE HERE</button><button data-op="load" ${d?'':'disabled'}>LOAD</button><button data-op="del" ${d?'':'disabled'}>DELETE</button>
+    <button data-op="export" ${SB||G.over?'disabled':''}>EXPORT CODE</button><button data-op="import">IMPORT CODE</button><button data-op="close">CLOSE</button></div>`);
+  const map={close:closeModal,
+    save:()=>{if(!canSave())return openSaves();if(d)return choose(`OVERWRITE ${label(k).toUpperCase()}?`,[{label:`Yes — replace B${d.g.depth}F turn ${d.g.turn}`,ch:'!',color:'#ff8a3d',fn:()=>{saveTo(k);openSaves()}}],openSaves);saveTo(k);openSaves()},
+    load:()=>choose(`LOAD ${label(k).toUpperCase()}?`,[{label:'Yes — your current run will be replaced',ch:'↻',color:'#9be070',fn:()=>loadFrom(k)}],openSaves),
+    del:()=>choose(`DELETE ${label(k).toUpperCase()}?`,[{label:'Yes — delete it',ch:'×',color:'#ff6a5a',fn:()=>{try{store().removeItem(SAVE_PREFIX+k)}catch(e){}say('Save deleted.','dim');openSaves()}}],openSaves),
+    export:openExport,import:openImport};
+  SLOTS.forEach((s,i)=>map['r'+i]=()=>{saveSel=i;openSaves()});
+  bindOps(map);
+}
+function openExport(){if(!canSave())return;const code=toCode();
+  openModal(`<h3>EXPORT CODE</h3><div class="desc">Copy this code to keep your run or move it to another device. Paste it into IMPORT CODE to continue.</div><textarea id="codeOut" readonly rows="6" style="width:100%;box-sizing:border-box;font:11px monospace;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:6px">${code}</textarea><div class="note">${Math.round(code.length/1024)} KB · B${G.depth}F · turn ${G.turn}</div><div class="btns"><button data-op="copy">COPY</button><button data-op="back">BACK</button></div>`);
+  bindOps({back:openSaves,copy:()=>{const t=$('#codeOut');t.select();(navigator.clipboard?navigator.clipboard.writeText(code):Promise.reject()).then(()=>say('Save code copied.','good'),()=>{try{document.execCommand('copy');say('Save code copied.','good')}catch(e){say('Select the code and copy it by hand.','dim')}})}})}
+function openImport(){
+  openModal(`<h3>IMPORT CODE</h3><div class="desc">Paste a code that starts with GW1: and load it. Your current run will be replaced.</div><textarea id="codeIn" rows="6" style="width:100%;box-sizing:border-box;font:11px monospace;background:#0d1219;color:#cfd6e0;border:1px solid #243041;border-radius:6px" placeholder="GW1:…"></textarea><div class="btns"><button data-op="go">LOAD CODE</button><button data-op="back">BACK</button></div>`);
+  bindOps({back:openSaves,go:()=>{try{fromCode($('#codeIn').value);say(`Code loaded: B${G.depth}F, turn ${G.turn}.`,'good')}catch(e){say('That code could not be loaded: '+e.message,'bad')}}})}
+
 // ---------------- KEYBOARD: every menu works from the keyboard ----------------
 let kbMode=false;const kb={screen:'',btn:0,gi:0};
 window.addEventListener('pointerdown',()=>{kbMode=false;document.querySelectorAll('.kbf').forEach(e=>e.classList.remove('kbf'))},true);
 function kbScreen(){const h=$('#sheet h3');return h?h.textContent.split(/[ ·0-9]/)[0]:''}
-function kbFocusables(){return [...$('#sheet').querySelectorAll('button:not(:disabled), select, input, .row')]}
+function kbFocusables(){return [...$('#sheet').querySelectorAll('button:not(:disabled), select, input, textarea, .row')]}
 function kbAfterRender(){
   if($('#modal').hidden)return;const sc=kbScreen();if(sc!==kb.screen){kb.screen=sc;kb.btn=0;kb.gi=0}
   if(!kbMode)return;
@@ -1583,7 +1726,7 @@ function markKb(){document.querySelectorAll('.kbf').forEach(e=>e.classList.remov
   const sel=$('#sheet .row.sel');if(sel)sel.scrollIntoView({block:'nearest'})}
 function keyDir(e){const key=e.key.length===1?e.key.toLowerCase():e.key;return KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):'']}
 function modalKey(e){
-  const sheet=$('#sheet'),k=e.key,ae=document.activeElement,typing=ae&&ae.tagName==='INPUT'&&ae.type!=='range';
+  const sheet=$('#sheet'),k=e.key,ae=document.activeElement,typing=ae&&((ae.tagName==='INPUT'&&ae.type!=='range')||ae.tagName==='TEXTAREA');
   if(k==='Escape'){e.preventDefault();if(G.over)return;const b=sheet.querySelector('[data-op="back"]')||sheet.querySelector('#pc')||sheet.querySelector('[data-op="close"]');if(b)b.click();else closeModal();return}
   // aim screen: direction keys turn you, Enter throws, 1-9 picks a target
   if(sheet.querySelector('.aimgrid')){
@@ -1605,15 +1748,16 @@ function modalKey(e){
   if(ae&&ae.type==='range'&&(k==='ArrowLeft'||k==='ArrowRight'))return;      // the slider moves natively
   if(ae&&ae.tagName==='SELECT'&&(k==='ArrowLeft'||k==='ArrowRight')){e.preventDefault();ae.selectedIndex=(ae.selectedIndex+(k==='ArrowRight'?1:-1)+ae.options.length)%ae.options.length;ae.dispatchEvent(new Event('input'));return}
   if(typing&&!['ArrowUp','ArrowDown','Enter','Tab'].includes(k))return;
+  if(ae&&ae.tagName==='TEXTAREA'&&(k==='ArrowUp'||k==='ArrowDown'))return;
   const next=['ArrowDown','ArrowRight','2','6'].includes(k)||(k==='Tab'&&!e.shiftKey),prev=['ArrowUp','ArrowLeft','8','4'].includes(k)||(k==='Tab'&&e.shiftKey);
   if(next||prev){e.preventDefault();i=i<0?(next?0:f.length-1):(i+(next?1:-1)+f.length)%f.length;kb.gi=i;f[i].focus();f[i].scrollIntoView({block:'nearest'});return}
-  if(k==='Enter'||k===' '){e.preventDefault();if(i<0){kb.gi=0;f[0].focus();return}if(ae.tagName==='BUTTON'||ae.classList.contains('row')){kb.gi=i;ae.click()}else if(typing){const go=sheet.querySelector('#rs');if(go)go.click()}}
+  if(k==='Enter'||k===' '){e.preventDefault();if(i<0){kb.gi=0;f[0].focus();return}if(ae.tagName==='BUTTON'||ae.classList.contains('row')){kb.gi=i;ae.click()}else if(typing&&ae.tagName!=='TEXTAREA'){const go=sheet.querySelector('#rs');if(go)go.click()}else if(ae.tagName==='TEXTAREA'&&k==='Enter'&&!e.shiftKey){const go=sheet.querySelector('[data-op="go"]');if(go){e.preventDefault();go.click()}}}
 }
 function openHelp(){
   const L=[['Move / attack','arrow keys · numpad (7 9 1 3 for diagonals)'],['Wait a turn','. · 5 · space'],['Turn without moving','Shift + direction, or F then a direction'],
     ['Items (pack)','I — then ↑↓ select, ←→ choose action, Enter, or the letter shown'],['Item letters','U use · E equip · T throw · D drop · P put in bag · O open bag · G take out · S split · M combine · C cook · A cook all · B build fire'],
     ['Aim a throw','direction keys turn, 1–9 picks a visible enemy, Enter throws, Esc back'],['Look','L — move the cursor, . cycles targets, F faces the target'],
-    ['Explore','O'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
+    ['Explore','O'],['Save / load','K — slots, autosave, export/import codes'],['Torch','T'],['Stairs','> or Enter'],['Map','Tab'],['Engine panel','P — ↑↓ move, ←→ change a slider or choice'],
     ['Sandbox','X toggle · M brush · G paint the tile you face · R run/pause · . step · , sandbox menu'],['Any menu','↑↓ ←→ move · Enter select · Esc back/close']];
   openModal(`<h3>KEYBOARD</h3>`+L.map(([a,b])=>`<div class="prm" style="grid-template-columns:150px 1fr"><b style="color:#fff">${a}</b><span style="text-align:left;color:#9aa6b6">${b}</span></div>`).join('')+`<div class="btns"><button data-op="close">CLOSE</button></div>`);
   bindOps({close:closeModal})}
@@ -1627,15 +1771,17 @@ function setActs(){
   const look=`<button data-a="look" class="${lookMode?'on':''}">LOOK</button>`,face=`<button data-a="face" id="faceBtn" class="${faceMode?'on':''}">FACE</button>`;
   if(SB){a.className='nine';a.innerHTML=`<button data-a="brush" style="color:${brushColor(SB.brush)}">✎ ${brushLabel(SB.brush).toUpperCase()}</button><button data-a="step">STEP</button><button data-a="run" class="${SB.running?'on':''}">${SB.running?'❚❚ PAUSE':'▶ RUN'}</button>`+
     `${face}<button data-a="items">ITEMS</button>${look}${torchB}<button data-a="menu">MENU</button>`}
-  else{a.className='nine';a.innerHTML=`${face}<button data-a="items">ITEMS</button>${look}<button data-a="explore" class="${exploring?'on':''}">${exploring?'■ STOP':'EXPLORE'}</button>${torchB}<button data-a="stairs">&gt; STAIRS</button><button data-a="params">⚙ ENGINE</button>`}
+  else{a.className='nine';a.innerHTML=`${face}<button data-a="items">ITEMS</button>${look}<button data-a="explore" class="${exploring?'on':''}">${exploring?'■ STOP':'EXPLORE'}</button>${torchB}<button data-a="stairs">&gt; STAIRS</button><button data-a="save">SAVE</button><button data-a="params">⚙ ENGINE</button>`}
 }
 function doAction(a){
   if(modalOpen())return;
+  if(['items','explore','stairs','face'].includes(a)&&paralyzed())return;
   if(a!=='explore')stopExplore();
   if(lookMode&&a==='face'){faceLookTarget();return}
   if(lookMode&&a!=='look')exitLook();
   switch(a){
     case 'look':lookMode?exitLook():enterLook();break;
+    case 'save':openSaves();break;
     case 'torch':G.torch=G.torch===false;say(G.torch?'You light your torch.':'You douse your torch. Stick to the shadows…',G.torch?'':'dim');computeView();updateHUD();setActs();break;
     case 'explore':exploring?stopExplore('Exploration stopped.'):startExplore();break;
     case 'face':setFace(!faceMode);break;
@@ -1672,7 +1818,7 @@ window.addEventListener('keydown',e=>{
   const key=e.key.length===1?e.key.toLowerCase():e.key;
   const d=KEYS[key]||KEYS[e.code&&e.code.startsWith('Numpad')?e.code.slice(6):''];
   if(d){e.preventDefault();if(e.shiftKey&&(d[0]||d[1])&&!lookMode){G.player.face=[d[0],d[1]];updateHUD();return}dirInput(d[0],d[1]);return}
-  if(key==='l'||key==='v'){doAction('look');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
+  if(key==='l'||key==='v'){doAction('look');return}if(key==='k'){doAction('save');return}if(key==='t'){doAction('torch');return}if(key==='o'&&!SB){doAction('explore');return}
   if(key==='f'){doAction('face');return}
   stopExplore();if(lookMode)exitLook();
   if(e.key==='Tab'){e.preventDefault();mmBig=!mmBig;return}

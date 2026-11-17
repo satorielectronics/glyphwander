@@ -4,6 +4,22 @@ Every published build. Builds with a `release/vX.Y.Z` branch can be restored wit
 Builds v0.2–v0.7 were published as artifact versions before the repo existed and were
 not kept as separate files; their changes are all contained in `v0.8.0`.
 
+## v0.11.0 — Trees, ore & smithing, tainted jerky, smarter investigation, save/load
+- Trees: block movement and sight (cover for sneaking), burn for a long time, attract lightning.
+  Walk into one to chop (3 swings, noisy) for 2–4 lumber and sometimes dry grass.
+- Ore veins glint in walls facing open ground: iron on every floor, mithril from B3.
+  Mine them by walking into them with a pickaxe (blacksmith sells one for $40).
+- Blacksmith smelts 2 ore → 1 bar (iron $5, mithril $15) and trades bars for gear:
+  Greatsword (power 7), Mithril Edge (power 9), Temper +2, Rune-forge (every seal),
+  Satchel, Overcharge staffs. Bars and ore stack to 10 and count from bags too.
+- Cooking rotten meat now makes Tainted Jerky: +30 fullness but paralyzes the eater for
+  5 turns; thrown at an enemy it paralyzes it for 6 (sneak attacks crit on paralyzed foes).
+- Enemies that hear a noise now path to it around walls and trees, then search the area.
+  Chopping, mining and digging make noise.
+- Save / load: SAVE button or K. Three slots plus an autosave on every new floor (browser
+  storage), and export/import codes to move a run between devices. Loading restores the
+  exact state — the same moves afterwards give the same result.
+
 ## v0.10.2 — Keyboard: L for LOOK, vim movement removed
 - LOOK is now on `L` (`V` still works).
 - Removed the vim movement keys (h j k l y u b n) everywhere, including menus, so those

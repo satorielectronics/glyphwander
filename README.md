@@ -36,6 +36,7 @@ Every build has a `release/vX.Y.Z` branch. See `CHANGELOG.md` for what each one 
 | `release/v0.10.0` | Full keyboard play, item stacks |
 | `release/v0.10.1` | Thrown items make enemies turn toward the sound |
 | `release/v0.10.2` | L for LOOK, vim movement keys removed |
+| `release/v0.11.0` | Trees, ore & smithing, tainted jerky, noise pathing, save/load |
 
 ## License
 GPL-3.0 — see `LICENSE`.
